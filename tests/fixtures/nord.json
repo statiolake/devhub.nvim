@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "name": "Nord",
+  "label": "Nord",
+  "kind": "dark",
+  "type": "dark",
+  "background": "dark",
+  "temporary": false,
+  "colors": {
+    "background": "#2e3440",
+    "foreground": "#d8dee9",
+    "cursor": "#d8dee9",
+    "cursorText": "#2e3440",
+    "selectionBackground": "#264f78",
+    "ansi": [
+      "#3b4252",
+      "#bf616a",
+      "#a3be8c",
+      "#ebcb8b",
+      "#81a1c1",
+      "#b48ead",
+      "#88c0d0",
+      "#e5e9f0",
+      "#4c566a",
+      "#bf616a",
+      "#a3be8c",
+      "#ebcb8b",
+      "#81a1c1",
+      "#b48ead",
+      "#8fbcbb",
+      "#eceff4"
+    ]
+  },
+  "editor": {
+    "editor.background": "#2e3440",
+    "editor.foreground": "#d8dee9",
+    "editor.lineHighlightBackground": "#3b4252",
+    "editor.selectionBackground": "#264f78",
+    "editor.findMatchHighlightBackground": "#6c412b",
+    "editor.findMatchBackground": "#515c6a",
+    "editorCursor.foreground": "#aeafad",
+    "editorLineNumber.foreground": "#4c566a",
+    "editorLineNumber.activeForeground": "#c6c6c6",
+    "editorWhitespace.foreground": "#4b505a",
+    "editorIndentGuide.background1": "#4b505a",
+    "editorBracketMatch.background": "#29393a",
+    "editorError.foreground": "#f14c4c",
+    "editorWarning.foreground": "#cca700",
+    "editorInfo.foreground": "#59a4f9",
+    "editorHint.foreground": "#b4b6ba",
+    "editorWidget.background": "#252526",
+    "diffEditor.insertedTextBackground": "#44523c",
+    "diffEditor.removedTextBackground": "#582a33",
+    "statusBar.background": "#007acc",
+    "statusBar.foreground": "#ffffff",
+    "tab.activeBackground": "#2e3440",
+    "tab.activeForeground": "#ffffff",
+    "tab.inactiveBackground": "#2d2d2d",
+    "tab.inactiveForeground": "#979aa0",
+    "sideBar.background": "#252526",
+    "panel.border": "#4b4f56",
+    "focusBorder": "#007fd4",
+    "list.activeSelectionBackground": "#04395e",
+    "list.activeSelectionForeground": "#ffffff",
+    "input.background": "#3c3c3c",
+    "scrollbarSlider.background": "#4c5057",
+    "descriptionForeground": "#9d9ea2",
+    "textLink.foreground": "#3794ff"
+  },
+  "tokens": {
+    "comment": {
+      "fg": "#616e88",
+      "italic": true
+    },
+    "comment.block.documentation": {
+      "fg": "#616e88",
+      "italic": true
+    },
+    "string": {
+      "fg": "#a3be8c"
+    },
+    "string.regexp": {
+      "fg": "#a3be8c"
+    },
+    "constant.numeric": {
+      "fg": "#b48ead"
+    },
+    "keyword": {
+      "fg": "#81a1c1"
+    },
+    "keyword.control": {
+      "fg": "#81a1c1"
+    },
+    "keyword.control.import": {
+      "fg": "#81a1c1"
+    },
+    "keyword.operator": {
+      "fg": "#81a1c1"
+    },
+    "entity.name.function": {
+      "fg": "#88c0d0"
+    },
+    "entity.name.function.preprocessor": {
+      "fg": "#88c0d0"
+    }
+  },
+  "fzf": "fg:#d8dee9,bg:#2e3440,hl:#81a1c1,fg+:#d8dee9,bg+:#264f78,hl+:#81a1c1,info:#ebcb8b,prompt:#81a1c1,pointer:#b48ead,marker:#a3be8c,spinner:#b48ead,header:#88c0d0,border:#4c566a,gutter:#2e3440,query:#d8dee9"
+}

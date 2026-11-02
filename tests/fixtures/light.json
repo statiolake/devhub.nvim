@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "name": "Light 2026",
+  "label": "Light 2026",
+  "kind": "light",
+  "type": "light",
+  "background": "light",
+  "temporary": false,
+  "colors": {
+    "background": "#ffffff",
+    "foreground": "#333333",
+    "cursor": "#333333",
+    "cursorText": "#ffffff",
+    "selectionBackground": "#add6ff",
+    "ansi": [
+      "#000000",
+      "#cd3131",
+      "#107c10",
+      "#949800",
+      "#0451a5",
+      "#bc05bc",
+      "#0598bc",
+      "#555555",
+      "#666666",
+      "#f14c4c",
+      "#14ce14",
+      "#b5ba00",
+      "#3b8eea",
+      "#d670d6",
+      "#29b8db",
+      "#a5a5a5"
+    ]
+  },
+  "editor": {
+    "editor.background": "#ffffff",
+    "editor.foreground": "#202020",
+    "editor.selectionBackground": "#add6ff",
+    "editor.findMatchHighlightBackground": "#f8c9ab",
+    "editor.findMatchBackground": "#a8ac94",
+    "editorCursor.foreground": "#000000",
+    "editorLineNumber.foreground": "#237893",
+    "editorLineNumber.activeForeground": "#0b216f",
+    "editorWhitespace.foreground": "#d6d6d6",
+    "editorIndentGuide.background1": "#d6d6d6",
+    "editorBracketMatch.background": "#e6f0e6",
+    "editorError.foreground": "#e51400",
+    "editorWarning.foreground": "#bf8803",
+    "editorInfo.foreground": "#0063d3",
+    "editorHint.foreground": "#6c6c6c",
+    "editorWidget.background": "#f3f3f3",
+    "diffEditor.insertedTextBackground": "#e6f2ca",
+    "diffEditor.removedTextBackground": "#ffcccc",
+    "statusBar.background": "#007acc",
+    "statusBar.foreground": "#ffffff",
+    "tab.activeBackground": "#ffffff",
+    "tab.activeForeground": "#333333",
+    "tab.inactiveBackground": "#ececec",
+    "tab.inactiveForeground": "#707070",
+    "sideBar.background": "#f3f3f3",
+    "panel.border": "#d3d3d3",
+    "focusBorder": "#0090f1",
+    "list.activeSelectionBackground": "#0060c0",
+    "list.activeSelectionForeground": "#ffffff",
+    "input.background": "#ffffff",
+    "scrollbarSlider.background": "#c1c1c1",
+    "descriptionForeground": "#717171",
+    "textLink.foreground": "#006ab1"
+  },
+  "tokens": {
+    "comment": {
+      "fg": "#6e7781"
+    },
+    "comment.block.documentation": {
+      "fg": "#6e7781"
+    }
+  },
+  "fzf": "fg:#333333,bg:#ffffff,hl:#0451a5,fg+:#333333,bg+:#add6ff,hl+:#3b8eea,info:#949800,prompt:#0451a5,pointer:#bc05bc,marker:#107c10,spinner:#bc05bc,header:#0598bc,border:#666666,gutter:#ffffff,query:#333333"
+}
