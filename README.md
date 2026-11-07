@@ -58,6 +58,52 @@ publishes; where a theme says nothing about one, the terminal palette fills in.
 On a remote host, where there is no file, the palette in
 `$DEVHUB_THEME_COLORS` is used.
 
+## DevHub's GUI: `require('devhub').gui`
+
+When DevHub draws your Neovim itself (`[general] editor = "neovim"` in
+DevHub's settings; `vim.g.devhub_gui` and `$DEVHUB_NEOVIM_GUI` are set), your
+config can put GUI elements into it. Every one is attached to a Neovim object
+and follows it — Neovim keeps the layout, the state and the keys.
+
+```lua
+local gui = require('devhub').gui
+
+if gui.available() then
+  -- A native toast (outside DevHub: vim.notify).
+  gui.notify { title = 'Build', msg = 'done in 3.2s', level = 'info' } -- 'warn' | 'error' | vim.log.levels.*
+
+  -- A GUI window: web content in an ordinary Neovim window.
+  local w = gui.open { title = 'Outline', html = '<button>…</button>', win = 'vsplit' }
+  --                   or url = 'https://…'; win = 'vsplit' | 'split' | 'float' | 'tab' | 'current'
+  gui.on_message(w, function(msg) end) -- the page's devhub.send(msg)
+  gui.send(w, { kind = 'hello' })       -- the page's devhub.onMessage(fn)
+  gui.close(w)
+
+  -- An image under line 5 (1-based) of the current buffer, in 10 rows reserved
+  -- with an extmark's virt_lines: it scrolls, folds and moves with them.
+  local img = gui.image(0, 5, '~/shots/diagram.png', { height_rows = 10 }) -- or an https URL
+  img.clear()
+end
+```
+
+- **One implementation.** DevHub injects the real module (`devhub_gui`) into
+  Neovim at every attach, over the UI's own RPC channel — it owns the other
+  end of every message, and it is there on an SSH host too. This module is
+  the stable face of it: it forwards when DevHub is attached, waits for the
+  attach (`User DevhubGui`) for a call made while Neovim is still starting,
+  and does nothing (answers `nil`) outside DevHub — `notify` falls back to
+  `vim.notify`. So `gui.*` is safe in a config shared with the terminal.
+- **LSP hover and signature help, drawn natively.** In DevHub's GUI, at the
+  first `LspAttach`, `vim.lsp.util.open_floating_preview` is wrapped so that
+  a markdown float is drawn by DevHub over its window: headings, lists,
+  fenced code highlighted, links that open in the browser. The float is still
+  Neovim's (`<C-w>w` into it, scroll it, `q`/`<Esc>` close it; DevHub
+  follows). Set `vim.g.devhub_rich_floats = false` to keep Neovim's own.
+- `:DevhubImageDemo [path]`, `:DevhubGuiDemo` and `:DevhubTerminal [float]`
+  come from DevHub. In `:DevhubTerminal`, keys go to the shell (`<C-w>`
+  deletes a word); `<C-\><C-n>` leaves for terminal-normal mode as in a
+  `:terminal`, and `i`/`a` go back in.
+
 ## Options
 
 ```lua
