@@ -68,7 +68,14 @@ vim.api.nvim_create_autocmd('User', {
 })
 
 --- A GUI window: web content DevHub paints over a Neovim window.
---- opts: { title, html | url, win = 'vsplit' | 'split' | 'float' | 'tab' | 'current' }.
+--- opts: { title, html | url, win = 'vsplit' | 'split' | 'float' | 'tab' | 'current',
+---   keyboard = 'neovim' | 'content' }.
+--- keyboard: 'neovim' (an html page's default) keeps the keys Neovim's, as
+--- in normal mode: the buffer's lines are the page's focusable elements, the
+--- cursor line the focused one, <CR> activates it, i/a/I/A type into a field
+--- (insert mode) and <Esc> leaves it. 'content' gives the page the keys
+--- while its window is current (<C-w> gives them back); a url page's default
+--- and only choice.
 --- Answers a handle (nil outside DevHub, or while it has not attached yet).
 function M.open(opts)
   local c = core()

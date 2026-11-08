@@ -93,6 +93,7 @@ if gui.available() then
   -- A GUI window: web content in an ordinary Neovim window.
   local w = gui.open { title = 'Outline', html = '<button>…</button>', win = 'vsplit' }
   --                   or url = 'https://…'; win = 'vsplit' | 'split' | 'float' | 'tab' | 'current'
+  --                   keyboard = 'neovim' (html's default: j/k/<CR>/i over its elements) | 'content'
   gui.on_message(w, function(msg) end) -- the page's devhub.send(msg)
   gui.send(w, { kind = 'hello' })       -- the page's devhub.onMessage(fn)
   gui.close(w)
