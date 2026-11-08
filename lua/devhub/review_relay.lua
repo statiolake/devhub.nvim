@@ -304,7 +304,6 @@ function M.thread_card(t, actions)
   if t.status == 'resolved' then
     return ui.hstack {
       card = true,
-      accent = M.config.colors.resolved,
       pad = { 4, 12 },
       gap = 8,
       ui.text({ { '✓ Resolved', bold = true } }, { tone = M.config.colors.ok }),
@@ -364,7 +363,6 @@ function M.thread_card(t, actions)
     }
   )
   children.card = true
-  children.accent = st.tone
   children.gap = 8
   children.pad = { 8, 12 }
   return ui.stack(children)
@@ -588,7 +586,6 @@ function M.entries()
         text = ('%s [%s] %s'):format(loc(t), st.label, first_line(t.root.body)),
         node = ui.stack {
           card = true,
-          accent = st.tone,
           pad = { 7, 12 },
           gap = 3,
           ui.hstack {
