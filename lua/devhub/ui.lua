@@ -160,9 +160,12 @@ function M.text(value, opts)
 end
 
 --- Markdown, drawn as DevHub draws a hover: ui.md('**bold** and `code`').
+--- opts.marks: ranges of its fenced code in a group's colours, each
+--- { line = <1-based line of text>, from = <utf-16 col>, to = <utf-16 col>,
+--- hl = 'Group' } (an LSP signature's active parameter).
 function M.md(text, opts)
   check('md', text, 'string', 'the text', false)
-  return with('md', { type = 'markdown', text = text }, opts, { size = 'string' })
+  return with('md', { type = 'markdown', text = text }, opts, { size = 'string', marks = 'table' })
 end
 M.markdown = M.md
 

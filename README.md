@@ -102,7 +102,9 @@ end
   `<C-d>`/`<C-u>`, `gg`/`G` scroll, `q`/`<Esc>` close, `y` yanks); moving
   the cursor closes it. The float's `border`/`title` give way to DevHub's
   frame; `max_width`/`max_height` are kept. Callers still get a buffer and
-  a (hidden) window back, as from Neovim. Neovim 0.10+; outside DevHub or on
+  a (hidden) window back, as from Neovim, and the highlights they put on
+  its code are drawn (signature help's active parameter, through
+  `ui.md(text, { marks = … })`). Neovim 0.10+; outside DevHub or on
   any error, Neovim's own float. Set `vim.g.devhub_rich_floats = false` to
   keep Neovim's always.
 - `:DevhubImageDemo [path]`, `:DevhubGuiDemo` and `:DevhubTerminal [float]`

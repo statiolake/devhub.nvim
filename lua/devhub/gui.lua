@@ -393,20 +393,54 @@ local function highlighted_runs(buf, row, line)
   return runs
 end
 
--- What a preview shows: markdown as markdown, another syntax as a code
--- block, plain text (a diagnostic float) as lines in the colours its caller
--- gives the float's buffer.
-local function preview_component(lines, syntax, buf)
-  local text = table.concat(lines, '\n')
+-- A byte column of line as a UTF-16 one (what the page counts in).
+local function utf16_col(line, byte)
+  byte = math.min(byte, #line)
+  if vim.fn.has 'nvim-0.11' == 1 then
+    local ok, n = pcall(vim.str_utfindex, line, 'utf-16', byte)
+    return ok and n or byte
+  end
+  local ok, _, u16 = pcall(vim.str_utfindex, line, byte)
+  return ok and u16 or byte
+end
+
+-- The highlights its caller put on the buffer's lines [first, last] (an
+-- LSP signature's active parameter), as marks of the markdown made of those
+-- lines: their lines counted from first.
+local function buffer_marks(buf, first, last)
+  local marks = {}
+  local ok, extmarks = pcall(vim.api.nvim_buf_get_extmarks, buf, -1, { first - 1, 0 }, { last - 1, -1 }, { details = true })
+  for _, m in ipairs(ok and extmarks or {}) do
+    local d = m[4] or {}
+    local row = m[2]
+    if d.hl_group and (d.end_row == nil or d.end_row == row) then
+      local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1] or ''
+      local from, to = utf16_col(line, m[3]), utf16_col(line, d.end_col or #line)
+      if to > from then
+        table.insert(marks, { line = row - first + 2, from = from, to = to, hl = d.hl_group })
+      end
+    end
+  end
+  return marks
+end
+
+-- What a preview shows: markdown as markdown (with the highlights its
+-- caller put on code in it), another syntax as a code block, plain text (a
+-- diagnostic float) as lines in the colours its caller gives the float's
+-- buffer. lines are the buffer's [first, last].
+local function preview_component(lines, syntax, buf, first, last)
+  local shown = vim.list_slice(lines, first, last)
+  local text = table.concat(shown, '\n')
   if syntax == 'markdown' then
-    return M.ui.md(text)
+    local marks = buffer_marks(buf, first, last)
+    return M.ui.md(text, #marks > 0 and { marks = marks } or nil)
   end
   if syntax and syntax ~= '' and syntax ~= 'plaintext' and syntax ~= 'text' then
     return M.ui.md('```' .. syntax .. '\n' .. text .. '\n```')
   end
   local children = {}
-  for row, line in ipairs(lines) do
-    table.insert(children, { type = 'text', wrap = true, runs = highlighted_runs(buf, row - 1, line) })
+  for row = first, last do
+    table.insert(children, { type = 'text', wrap = true, runs = highlighted_runs(buf, row - 1, lines[row]) })
   end
   return { type = 'stack', gap = 2, children = children }
 end
@@ -436,13 +470,16 @@ function M._popup_preview(contents, syntax, opts)
       table.insert(lines, piece)
     end
   end
-  while #lines > 0 and vim.trim(lines[#lines]) == '' do
-    table.remove(lines)
+  -- The buffer holds every line, as its caller expects (it highlights
+  -- them by number); the popup leaves out blank ones at either end.
+  local first, last = 1, #lines
+  while last >= first and vim.trim(lines[last]) == '' do
+    last = last - 1
   end
-  while #lines > 0 and vim.trim(lines[1]) == '' do
-    table.remove(lines, 1)
+  while first <= last and vim.trim(lines[first]) == '' do
+    first = first + 1
   end
-  if #lines == 0 then
+  if first > last then
     return nil
   end
   local buf = vim.api.nvim_create_buf(false, true)
@@ -455,13 +492,14 @@ function M._popup_preview(contents, syntax, opts)
   })
   local close_on = vim.deepcopy(opts.close_events or { 'CursorMoved', 'CursorMovedI', 'InsertCharPre' })
   table.insert(close_on, 'BufLeave')
+  local component = preview_component(lines, syntax, buf, first, last)
   local handle = c.popup {
-    component = preview_component(lines, syntax, buf),
+    component = component,
     placement = opts.anchor_bias == 'above' and 'above' or 'below',
     max_width = opts.max_width,
     max_height = opts.max_height,
     close_on = close_on,
-    text = table.concat(lines, '\n'),
+    text = table.concat(vim.list_slice(lines, first, last), '\n'),
     on_close = function()
       if previews[key] and previews[key].win == win then
         previews[key] = nil
@@ -485,14 +523,18 @@ function M._popup_preview(contents, syntax, opts)
       end
     end,
   })
-  if syntax ~= 'markdown' then
-    -- The caller colours the buffer once this returns: then the popup.
-    vim.schedule(function()
-      if handle.is_open() and vim.api.nvim_buf_is_valid(buf) then
-        handle.update(preview_component(lines, syntax, buf))
-      end
-    end)
-  end
+  -- The caller colours the buffer once this returns (a diagnostic's lines,
+  -- a signature's active parameter): then the popup, if that changed it.
+  local before = vim.inspect(component)
+  vim.schedule(function()
+    if not handle.is_open() or not vim.api.nvim_buf_is_valid(buf) then
+      return
+    end
+    local now = preview_component(lines, syntax, buf, first, last)
+    if vim.inspect(now) ~= before then
+      handle.update(now)
+    end
+  end)
   return buf, win
 end
 
