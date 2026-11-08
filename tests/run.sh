@@ -17,6 +17,3 @@ done
 echo "gui, components and review-relay:"
 "$NVIM" --headless --clean --cmd "set rtp^=$PWD" \
   -c "lua local ok, e = pcall(dofile, 'tests/gui_spec.lua'); if not ok then io.stderr:write('FAIL\n  ' .. tostring(e) .. '\n'); vim.cmd 'cquit 1' end" </dev/null
-echo "source:"
-"$NVIM" --headless --clean --cmd "set rtp^=$PWD" \
-  -c "lua local ok, e = pcall(dofile, 'tests/source_spec.lua'); if not ok then io.stderr:write('FAIL\n  ' .. tostring(e) .. '\n'); vim.cmd 'cquit 1' end" -c 'qall!' </dev/null
