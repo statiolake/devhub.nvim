@@ -69,7 +69,7 @@ and follows it — Neovim keeps the layout, the state and the keys.
 local gui = require('devhub').gui
 
 if gui.available() then
-  -- A native toast (outside DevHub: vim.notify).
+  -- A notification, fidget-like (outside DevHub: vim.notify).
   gui.notify { title = 'Build', msg = 'done in 3.2s', level = 'info' } -- 'warn' | 'error' | vim.log.levels.*
 
   -- A GUI window: web content in an ordinary Neovim window.
@@ -104,11 +104,160 @@ end
   deletes a word); `<C-\><C-n>` leaves for terminal-normal mode as in a
   `:terminal`, and `i`/`a` go back in.
 
+## Buffer-backed GUI: components, views, cards, decorations
+
+Neovim keeps the state, the layout and the keys; DevHub only paints. What
+DevHub paints is described as **data** — components — not HTML: DevHub draws
+them in its own type with your colours (every colour is a highlight group, or
+a tone that names one, resolved by Neovim). A click on a node runs its
+`on_click` in Neovim. HTML stays the escape hatch (`gui.open`). Outside
+DevHub every call below is harmless: a view is just its buffer's text, a card
+reserves nothing, the handles do nothing.
+
+### Components: `gui.ui`
+
+```lua
+local gui = require('devhub').gui
+local ui = gui.ui
+
+ui.card {                                   -- a raised column; accent = a bar on the left
+  accent = 'warn',
+  ui.hstack {                               -- a row; gap, pad, align, justify, wrap, indent, bg
+    ui.avatar('claude', { tone = 'keyword' }),
+    ui.text { { 'claude', bold = true }, ' replied ', { '3 min ago', dim = true } }, -- runs
+    ui.badge('agent', { tone = 'keyword' }), ui.pill(2, { tone = 'warn' }),
+    ui.spacer(),                            -- all the room left (or ui.spacer(8): 8 px)
+    ui.icon(0xf09b),                        -- a Nerd Font codepoint, in the grid's font
+  },
+  ui.md 'Yes — `os.Rename` is atomic, but **without a sync** …', -- the hover renderer
+  ui.divider(),
+  ui.hstack {
+    ui.checkbox('mixed'),                   -- true | false | 'mixed'
+    ui.progress(0.56, { label = '5 / 9 reviewed', grow = true }),
+    ui.sparkline({ 3, 5, 2, 8 }, { kind = 'bar', tone = 'ok' }),
+  },
+  ui.chart { { values = { 1, 4, 2, 6 }, tone = 'ok', label = 'passed' } },
+  ui.image '~/shots/plot.png',              -- a path, an https or data URL
+  ui.hstack { ui.button('Reply', { key = 'r', on_click = reply }), ui.kbd 'q' },
+}
+```
+
+Text takes `size = 'xs' | 'sm' | 'md' | 'lg'`, `mono`, `bold`, `dim`, `wrap`
+(else one line with an ellipsis) and `hl`/`tone`; runs take `hl`/`tone`,
+`mono`, `bold`, `italic`, `dim`, `strike`, `underline`. Tones: `info`, `warn`,
+`error`, `ok`, `hint`, `muted`, `accent`, `special`, `keyword`, `string`,
+`title`, `added`, `changed`, `removed`. Every node takes `on_click`, `grow`
+and `tip`. The builders check their arguments; `ui.validate(node)` checks a
+tree made by hand.
+
+### `gui.view`: a panel that is a buffer
+
+One buffer line per item — your code writes the lines, so `/`, `5j`, marks
+and macros work on them — and DevHub paints each item's component over every
+window showing the buffer, as tall as it draws (not bound to cells). The
+cursor line is the focused item (a ring in the cursor's colour), kept in
+sight; a click moves the cursor there and runs the node's (or the view's)
+`on_click`; the wheel scrolls and takes the cursor along. An edit to the
+buffer draws it again.
+
+```lua
+local buf = vim.api.nvim_create_buf(false, true)
+vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'Tests', 'ok   parse', 'FAIL render' })
+local view = gui.view {
+  buf = buf,
+  win = 'vsplit',                         -- or a window; nil: wherever the buffer is shown
+  items = function(lnum, line)            -- or { [lnum] = component }; nil: the plain line
+    if lnum == 1 then return ui.text('Tests', { size = 'lg', bold = true }) end
+    local ok = line:match '^ok'
+    return ui.hstack { ui.badge(ok and 'ok' or 'FAIL', { tone = ok and 'ok' or 'error' }), ui.text(line:sub(6)) }
+  end,
+  on_click = function(lnum) end,
+  keys = { { 'j/k', 'move' }, { '<CR>', 'open' } }, -- the hint line
+}
+view:update()                             -- draw again (state the items read changed)
+view:close()
+```
+
+### `gui.inline`: a card under a line
+
+```lua
+local card = gui.inline {
+  buf = 0, lnum = 87,                     -- under line 87
+  id = 'thread:42',                       -- the same id updates this card
+  range = { 84, 87 },                     -- the cursor here marks the card active
+  component = ui.card { ui.md '**Waiting for the agent**' },
+}
+card:update(new_component); card:move(90); card:clear()
+gui.inline_focus(card, true)              -- ring it, whatever the cursor says
+```
+
+Neovim reserves the rows (`virt_lines`); DevHub measures the card and Neovim
+reserves exactly that many (it settles at once: the height depends on the
+width only). It follows scrolling, folds and window moves and is clipped by
+its window. Its keys are yours: buffer-local keymaps on its lines.
+
+### `gui.decorate`: a dimmed, highlighted or tagged range
+
+```lua
+local d = gui.decorate { buf = 0, range = { 23, 31 }, style = 'dim' }  -- 'highlight' | 'tag'
+gui.decorate { buf = 0, range = { 32, 36 }, style = 'highlight', hl = 'warn', tag = 'NEW since viewed' }
+d:clear()
+```
+
+Painted over every window showing the range, diff windows too; the range
+follows edits.
+
+### Notifications: `notify = true`
+
+```lua
+require('devhub').setup { notify = true }  -- or require('devhub').gui.override_notify()
+gui.notify { group = 'build', key = 'job:1', msg = 'compiling', progress = true, percent = 40 }
+gui.notify { group = 'build', key = 'job:1', msg = 'compiled', done = true }
+```
+
+In DevHub's GUI `vim.notify` becomes DevHub's, drawn as fidget draws: compact
+lines at the bottom right above the status line, under their source
+(`opts.title`), fading. LSP progress (`LspProgress`, 0.10+) shows as a
+spinner, the work's title and its percentage, ticked when done. Outside
+DevHub nothing changes.
+
+## review-relay: `:ReviewRelay`
+
+[review-relay](https://github.com/statiolake/review-relay)'s review, inside
+Neovim, as a thin adapter: it reads and writes through review-relay's own
+commands and endpoints (`review-relay comments list|resolve|unresolve`, a
+reply as you, `/ui/files`, reviewed marks) and follows the viewer's event
+stream, so a reply from the agent shows at once (and is notified).
+
+- `:ReviewRelay` opens the panel (a `gui.view`): progress, the files with
+  their status, reviewed checkboxes and thread counts, Waiting / Answered /
+  All, the threads, the overall comment. Keys: `<CR>` open (a file, a
+  thread at its line; a directory folds), `<Space>` reviewed, `r` reply,
+  `s` resolve / reopen, `f` filter, `R` refresh, `q` close.
+- In a file of the review each thread is a card under its last line
+  (`gui.inline`): the comments in markdown, who wrote them (you / agent),
+  Reply and Resolve; `r` and `s` on the thread's lines do the same (anywhere
+  else they are `r` and `s`). A resolved thread folds to one line.
+- `:ReviewRelay refresh`, `:ReviewRelay stop`.
+
+A viewer must be running for the workspace (`review-relay main...HEAD`, or
+`review-relay --no-window main...HEAD`). Outside DevHub's GUI the panel is the
+same buffer as text, the keys work, threads are signs.
+
+```lua
+require('devhub.review_relay').setup {
+  cmd = 'review-relay', width = 54, reply_with = 'input', -- or 'buffer' (:w sends)
+  inline_keys = { reply = 'r', resolve = 's' },           -- false: none
+  colors = { agent = 'Function', human = 'DiagnosticInfo', waiting = 'DiagnosticWarn' },
+}
+```
+
 ## Options
 
 ```lua
 require('devhub').setup {
   auto = true,     -- wear the theme at startup when no colorscheme is chosen
+  notify = false,  -- vim.notify drawn by DevHub (in its GUI), with LSP progress
   follow = true,   -- follow User DevhubTheme and changes to the file
   on_apply = function(theme) end, -- your tweaks, after every apply
 }
@@ -124,7 +273,9 @@ fzf-lua's `fzf_opts`.
 ```sh
 tests/run.sh   # nvim --headless: startup highlights match the theme file
                # before any event; a live switch and back is identical; a
-               # replaced file is followed; setup() outside DevHub is a no-op
+               # replaced file is followed; setup() outside DevHub is a no-op;
+               # the component builders, the GUI facade over a stand-in for
+               # DevHub, and :ReviewRelay against a fake review-relay CLI
 ```
 
 Neovim 0.9 or later.
