@@ -93,12 +93,18 @@ end
   attach (`User DevhubGui`) for a call made while Neovim is still starting,
   and does nothing (answers `nil`) outside DevHub — `notify` falls back to
   `vim.notify`. So `gui.*` is safe in a config shared with the terminal.
-- **LSP hover and signature help, drawn natively.** In DevHub's GUI, at the
-  first `LspAttach`, `vim.lsp.util.open_floating_preview` is wrapped so that
-  a markdown float is drawn by DevHub over its window: headings, lists,
-  fenced code highlighted, links that open in the browser. The float is still
-  Neovim's (`<C-w>w` into it, scroll it, `q`/`<Esc>` close it; DevHub
-  follows). Set `vim.g.devhub_rich_floats = false` to keep Neovim's own.
+- **LSP hover, signature help and diagnostic floats as DevHub popups.** In
+  DevHub's GUI, at the first `LspAttach`, `vim.lsp.util.open_floating_preview`
+  is wrapped so that its floats are `gui.popup`s: laid out by DevHub
+  (paragraphs reflowed, fenced code wrapped and highlighted, links that open
+  in the browser), at the cursor, flipping above when there is no room
+  below, scrolling inside when long. `K K` focuses it (`j`/`k`,
+  `<C-d>`/`<C-u>`, `gg`/`G` scroll, `q`/`<Esc>` close, `y` yanks); moving
+  the cursor closes it. The float's `border`/`title` give way to DevHub's
+  frame; `max_width`/`max_height` are kept. Callers still get a buffer and
+  a (hidden) window back, as from Neovim. Neovim 0.10+; outside DevHub or on
+  any error, Neovim's own float. Set `vim.g.devhub_rich_floats = false` to
+  keep Neovim's always.
 - `:DevhubImageDemo [path]`, `:DevhubGuiDemo` and `:DevhubTerminal [float]`
   come from DevHub. In `:DevhubTerminal`, keys go to the shell (`<C-w>`
   deletes a word); `<C-\><C-n>` leaves for terminal-normal mode as in a
@@ -206,6 +212,29 @@ d:clear()
 
 Painted over every window showing the range, diff windows too; the range
 follows edits.
+
+### `gui.popup`: a hover at a buffer position
+
+```lua
+local pop = gui.popup {
+  anchor = 'cursor',                      -- or { buf, lnum, col } (lnum 1-based, col 0-based)
+  placement = 'below',                    -- 'above' | 'auto': the side it tries first
+  component = ui.md '**detect**() -> `Platform`',
+  max_width = 80, max_height = 20,        -- cells
+  close_on = { 'CursorMoved', 'InsertEnter', 'BufLeave' }, -- while not focused
+  keys = { ['<CR>'] = function(p) end },  -- extra keys while focused
+  text = 'what y yanks',                  -- default: the content's text
+  on_close = function(p) end,
+}
+pop:focus()                               -- j/k, <C-d>/<C-u>, gg/G scroll; q/<Esc> close; y yanks
+pop:scroll('half'); pop:update(ui.md 'new'); pop:close(); pop:is_open()
+```
+
+No Neovim window: DevHub draws it at the position (it follows scrolling),
+as wide and tall as its content up to its maximum and the room there, and
+scrolls inside past that (the wheel too). Neovim keeps the keys: focused,
+the keys above are buffer-local maps on the anchor's buffer, and what they
+replaced comes back when it closes. Outside DevHub `gui.popup` answers `nil`.
 
 ### Notifications: `notify = true`
 

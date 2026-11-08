@@ -41,6 +41,14 @@ check(h and h.pending, 'a view outside DevHub is a pending handle')
 h:update()
 h:close()
 check(gui.override_notify() == false, 'override_notify outside DevHub')
+check(gui.popup { component = ui.md 'x' } == nil, 'a popup outside DevHub is nil')
+-- The LSP float hook leaves Neovim's own float outside DevHub.
+gui.hook_floats()
+local util = vim.lsp.util
+local obuf, owin = util.open_floating_preview({ '# hi' }, 'markdown', {})
+check(vim.api.nvim_win_is_valid(owin) and not vim.api.nvim_win_get_config(owin).hide, 'outside DevHub: Neovim\'s float')
+check(vim.api.nvim_buf_get_lines(obuf, 0, -1, false)[1] ~= nil, 'its buffer')
+vim.api.nvim_win_close(owin, true)
 
 -- 2. Builders and validation.
 local card = ui.card {
@@ -79,6 +87,56 @@ check(calls.view_updates == 1, 'a handle forwards its methods')
 check(gui.override_notify() == true, 'override_notify in DevHub')
 vim.notify('hello', vim.log.levels.WARN, { title = 'test' })
 check(calls.notify[1] and calls.notify[1].msg == 'hello' and calls.notify[1].group == 'test', 'vim.notify forwarded')
+
+-- LSP floats as popups: hover, signature help, diagnostics.
+calls.popup = {}
+local function fake_popup(opts)
+  local p = { opts = opts, open = true, focused = 0, updates = 0 }
+  table.insert(calls.popup, p)
+  local h = { id = #calls.popup }
+  function h.is_open() return p.open end
+  function h.close()
+    if p.open then
+      p.open = false
+      if opts.on_close then opts.on_close(h) end
+    end
+  end
+  function h.focus() p.focused = p.focused + 1 end
+  function h.update(component) p.updates = p.updates + 1; p.component = component end
+  return h
+end
+core.popup = fake_popup
+if vim.fn.has 'nvim-0.10' == 1 then
+  local hover = { '```python', '(method) def detect() -> Literal[...]', '```', '', 'Detect the platform.' }
+  local pbuf, pwin = util.open_floating_preview(hover, 'markdown', { focus_id = 'textDocument/hover', max_width = 60 })
+  local first = calls.popup[1]
+  check(first and first.opts.component.type == 'markdown', 'hover is a popup of markdown')
+  check(first and first.opts.component.text:find('def detect', 1, true), 'with the hover text')
+  check(first and first.opts.max_width == 60, 'max sizes kept')
+  check(vim.api.nvim_win_is_valid(pwin) and vim.api.nvim_win_get_config(pwin).hide == true, 'a hidden window answers')
+  check(vim.api.nvim_buf_get_lines(pbuf, 0, 1, false)[1] == '```python', 'its buffer has the lines')
+  -- K K: into the popup, not a second one.
+  local again_buf = util.open_floating_preview(hover, 'markdown', { focus_id = 'textDocument/hover' })
+  check(#calls.popup == 1 and first.focused == 1 and again_buf == pbuf, 'asked again: focused')
+  -- Its caller closing the window closes the popup.
+  vim.api.nvim_win_close(pwin, true)
+  check(not first.open, 'the window closed: the popup closed')
+  -- A diagnostic float: plain text in the colours its caller gives the buffer.
+  local dbuf = util.open_floating_preview({ 'Diagnostics:', '1. undefined name' }, 'plaintext', { focus_id = 'cursor' })
+  vim.api.nvim_buf_add_highlight(dbuf, -1, 'DiagnosticError', 1, 3, 17)
+  local diag = calls.popup[2]
+  check(vim.wait(1000, function() return diag and diag.updates > 0 end), 'the diagnostic popup coloured')
+  local runs = diag and diag.component and diag.component.children[2].runs or {}
+  check(runs[2] and runs[2].hl == 'DiagnosticError' and runs[2].text == 'undefined name', 'a run in the diagnostic colour')
+  check(ui.validate(diag.component), 'the diagnostic component validates')
+  diag.opts.on_close()
+  -- A popup that fails: Neovim's float after all.
+  core.popup = function() error 'boom' end
+  local _, fwin = util.open_floating_preview({ 'x' }, 'markdown', {})
+  check(vim.api.nvim_win_is_valid(fwin) and not vim.api.nvim_win_get_config(fwin).hide, 'an error: Neovim\'s float')
+  vim.api.nvim_win_close(fwin, true)
+  core.popup = fake_popup
+end
 
 -- 4. review-relay, against the fake CLI.
 local fixtures = vim.fn.getcwd() .. '/tests/fixtures/review-relay'

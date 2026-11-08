@@ -14,8 +14,8 @@
 --     Neovim starts in DevHub's GUI ($DEVHUB_NEOVIM_GUI) waits for the
 --     attach (`User DevhubGui`) instead of being dropped.
 --
--- It also installs the hook that lets DevHub draw LSP hover and signature
--- help natively (see M.hook_floats).
+-- It also installs the hook that shows LSP hover, signature help and
+-- diagnostic floats as DevHub popups (see M.hook_floats).
 
 local M = {}
 
@@ -200,11 +200,6 @@ function M.image(buf, line, src, opts)
   end)
 end
 
---- Draw a float's markdown natively (what the hook below does for LSP).
-function M.rich_float(win, markdown)
-  local c = core()
-  return c and c.rich_float and c.rich_float(win, markdown) or nil
-end
 
 -- Buffer-backed GUI: views, inline cards, decorations. ---------------------
 
@@ -319,6 +314,188 @@ function M.decorate_clear_all(buf)
   end
 end
 
+--- A popup DevHub draws at a buffer position (a hover), with no Neovim
+--- window: Neovim keeps the content and the keys.
+---   opts.anchor     'cursor' (default) or { buf, lnum, col } (1-based lnum, 0-based col)
+---   opts.placement  'below' (default) | 'above' | 'auto': the side it prefers;
+---                   it flips when the other side has the room
+---   opts.component  a gui.ui tree (ui.md for markdown and code)
+---   opts.max_width, opts.max_height  in cells
+---   opts.close_on   events that close it while it is not focused
+---                   (default CursorMoved, CursorMovedI, InsertCharPre, BufLeave)
+---   opts.keys       { [lhs] = fn(handle) }: extra keys while it is focused
+---   opts.text       what y yanks (default: the content's text)
+---   opts.on_close   fn(handle)
+--- Answers a handle — :update(component), :focus() (j/k, <C-d>/<C-u>, gg/G
+--- scroll it, q/<Esc> close it, y yanks, until the cursor moves),
+--- :scroll(n | 'half' | '-half' | 'page' | '-page' | 'top' | 'bottom'),
+--- :close(), :is_open() — or nil outside DevHub.
+function M.popup(opts)
+  opts = opts or {}
+  check_component('popup', opts.component)
+  local c = core()
+  return c and c.popup and c.popup(opts) or nil
+end
+
+-- LSP floats as popups. ------------------------------------------------------
+
+-- The open previews, by focus_id: { handle, buf, win, source }.
+local previews = {}
+
+local function close_preview(key)
+  local p = previews[key]
+  if not p then
+    return
+  end
+  previews[key] = nil
+  if p.handle.is_open() then
+    p.handle.close()
+  end
+  if vim.api.nvim_win_is_valid(p.win) then
+    pcall(vim.api.nvim_win_close, p.win, true)
+  end
+end
+
+-- A line's highlights (extmarks with a group, any namespace) as text runs.
+local function highlighted_runs(buf, row, line)
+  local cuts = { [0] = true, [#line] = true }
+  local spans = {}
+  local ok, marks = pcall(vim.api.nvim_buf_get_extmarks, buf, -1, { row, 0 }, { row, -1 }, { details = true })
+  for _, m in ipairs(ok and marks or {}) do
+    local d = m[4] or {}
+    if d.hl_group and (d.end_row == nil or d.end_row == row) then
+      local from, to = m[3], math.min(d.end_col or #line, #line)
+      if to > from then
+        table.insert(spans, { from, to, d.hl_group })
+        cuts[from], cuts[to] = true, true
+      end
+    end
+  end
+  local points = vim.tbl_keys(cuts)
+  table.sort(points)
+  local runs = {}
+  for i = 1, #points - 1 do
+    local a, b = points[i], points[i + 1]
+    local group
+    for _, sp in ipairs(spans) do
+      if sp[1] <= a and sp[2] >= b then
+        group = sp[3]
+      end
+    end
+    local text = line:sub(a + 1, b)
+    if text ~= '' then
+      table.insert(runs, { text = text, hl = group })
+    end
+  end
+  if #runs == 0 then
+    runs = { { text = line == '' and ' ' or line } }
+  end
+  return runs
+end
+
+-- What a preview shows: markdown as markdown, another syntax as a code
+-- block, plain text (a diagnostic float) as lines in the colours its caller
+-- gives the float's buffer.
+local function preview_component(lines, syntax, buf)
+  local text = table.concat(lines, '\n')
+  if syntax == 'markdown' then
+    return M.ui.md(text)
+  end
+  if syntax and syntax ~= '' and syntax ~= 'plaintext' and syntax ~= 'text' then
+    return M.ui.md('```' .. syntax .. '\n' .. text .. '\n```')
+  end
+  local children = {}
+  for row, line in ipairs(lines) do
+    table.insert(children, { type = 'text', wrap = true, runs = highlighted_runs(buf, row - 1, line) })
+  end
+  return { type = 'stack', gap = 2, children = children }
+end
+
+--- open_floating_preview as a DevHub popup: a scratch buffer with the lines
+--- (its caller adds highlights to it) and a hidden float (its caller may
+--- close it; that closes the popup too) are what it answers, as Neovim's
+--- does. Nil when it cannot (outside DevHub, before 0.10): Neovim's float.
+function M._popup_preview(contents, syntax, opts)
+  local c = core()
+  if not c or not c.popup or vim.fn.has 'nvim-0.10' == 0 then
+    return nil
+  end
+  opts = opts or {}
+  local source = vim.api.nvim_get_current_buf()
+  local key = opts.focus_id or ('preview:' .. tostring(source))
+  local open = previews[key]
+  if open and open.handle.is_open() and open.source == source and opts.focus ~= false and opts.focus_id then
+    -- Asked again (K K): into it.
+    open.handle.focus()
+    return open.buf, open.win
+  end
+  close_preview(key)
+  local lines = {}
+  for _, line in ipairs(type(contents) == 'table' and contents or { tostring(contents or '') }) do
+    for _, piece in ipairs(vim.split(line, '\n', { plain = true })) do
+      table.insert(lines, piece)
+    end
+  end
+  while #lines > 0 and vim.trim(lines[#lines]) == '' do
+    table.remove(lines)
+  end
+  while #lines > 0 and vim.trim(lines[1]) == '' do
+    table.remove(lines, 1)
+  end
+  if #lines == 0 then
+    return nil
+  end
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].bufhidden = 'wipe'
+  vim.bo[buf].filetype = syntax or ''
+  local win = vim.api.nvim_open_win(buf, false, {
+    relative = 'editor', row = 0, col = 0, width = 1, height = 1,
+    hide = true, focusable = false, style = 'minimal', noautocmd = true,
+  })
+  local close_on = vim.deepcopy(opts.close_events or { 'CursorMoved', 'CursorMovedI', 'InsertCharPre' })
+  table.insert(close_on, 'BufLeave')
+  local handle = c.popup {
+    component = preview_component(lines, syntax, buf),
+    placement = opts.anchor_bias == 'above' and 'above' or 'below',
+    max_width = opts.max_width,
+    max_height = opts.max_height,
+    close_on = close_on,
+    text = table.concat(lines, '\n'),
+    on_close = function()
+      if previews[key] and previews[key].win == win then
+        previews[key] = nil
+      end
+      if vim.api.nvim_win_is_valid(win) then
+        pcall(vim.api.nvim_win_close, win, true)
+      end
+    end,
+  }
+  if not handle then
+    pcall(vim.api.nvim_win_close, win, true)
+    return nil
+  end
+  previews[key] = { handle = handle, buf = buf, win = win, source = source }
+  vim.api.nvim_create_autocmd('WinClosed', {
+    pattern = tostring(win),
+    once = true,
+    callback = function()
+      if handle.is_open() then
+        handle.close()
+      end
+    end,
+  })
+  if syntax ~= 'markdown' then
+    -- The caller colours the buffer once this returns: then the popup.
+    vim.schedule(function()
+      if handle.is_open() and vim.api.nvim_buf_is_valid(buf) then
+        handle.update(preview_component(lines, syntax, buf))
+      end
+    end)
+  end
+  return buf, win
+end
+
 local hooked = false
 
 --- hook_floats() at the first LspAttach: vim.lsp stays unloaded until then.
@@ -332,11 +509,12 @@ function M.hook_floats_on_lsp()
   })
 end
 
---- Hook vim.lsp.util.open_floating_preview so that a markdown float (LSP
---- hover, signature help) is drawn by DevHub: headings, lists, fenced code
---- highlighted, links clickable. The float stays Neovim's — its keys scroll
---- and close it, DevHub follows — and anything unexpected leaves Neovim's
---- own rendering. Installed by setup() and at startup in DevHub's GUI; set
+--- Hook vim.lsp.util.open_floating_preview so that its floats — LSP hover,
+--- signature help, vim.diagnostic.open_float — are DevHub popups in
+--- DevHub's GUI (M._popup_preview): laid out by DevHub, at the cursor, K K
+--- to focus, q to close. A float's border and title are DevHub's frame
+--- there (its max sizes are kept). Outside DevHub, or on any error, Neovim's
+--- own float. Installed by setup() and at startup in DevHub's GUI; set
 --- vim.g.devhub_rich_floats = false to keep Neovim's.
 function M.hook_floats()
   if hooked or vim.g.devhub_rich_floats == false then
@@ -349,20 +527,13 @@ function M.hook_floats()
   hooked = true
   local original = util.open_floating_preview
   util.open_floating_preview = function(contents, syntax, opts, ...)
-    local buf, win = original(contents, syntax, opts, ...)
-    if
-      syntax == 'markdown'
-      and vim.g.devhub_rich_floats ~= false
-      and core()
-      and win
-      and vim.api.nvim_win_is_valid(win)
-      and buf
-      and vim.api.nvim_buf_is_valid(buf)
-      and vim.bo[buf].filetype == 'markdown'
-    then
-      pcall(M.rich_float, win, contents)
+    if vim.g.devhub_rich_floats ~= false then
+      local ok, buf, win = pcall(M._popup_preview, contents, syntax, opts)
+      if ok and buf then
+        return buf, win
+      end
     end
-    return buf, win
+    return original(contents, syntax, opts, ...)
   end
 end
 
