@@ -290,6 +290,55 @@ require('devhub.review_relay').setup {
 }
 ```
 
+## Buffer sources: `require('devhub.source')`
+
+A convention, not a feature: which file, at which revision, a buffer shows.
+Plugins that **show** files (diff views, history, blame) and plugins that
+**attach** things to a file's lines (review threads, coverage, notes) meet
+here and need not know each other. Nothing in it depends on DevHub; it works
+in any Neovim.
+
+- A buffer that shows a file at a revision holds exactly that file's lines,
+  one buffer line per file line. Whatever else it shows — the deleted lines
+  of an inline diff, a banner, a card — is extmarks and `virt_lines`, never
+  real lines. So line N of the buffer is line N of the file at that revision,
+  and an anchor computed on the file holds on the buffer.
+- It carries `b:devhub_source`:
+
+  | field   | meaning |
+  | ------- | ------- |
+  | `root`  | the work tree's absolute path, symlinks resolved |
+  | `path`  | the file, relative to `root`, `/`-separated |
+  | `rev`   | a full commit id, `'index'` or `'worktree'`; nil for a bare blob in no commit (a saved snapshot) |
+  | `blob`  | the content's blob id, when known (optional) |
+  | `label` | a short name for the revision, e.g. `origin/main` (optional) |
+
+  An ordinary file buffer needs none: `get()` derives
+  `{ root, path, rev = 'worktree' }` for a file in a git work tree. Only
+  `rev = 'worktree'` is the editable file on disk.
+- Setting or changing it fires `User DevhubSource` with
+  `data = { buf = <bufnr>, source = <desc or nil> }`. A producer may fire it
+  before and again after it loads the lines; a consumer simply decorates the
+  buffer again on every event (and on `BufReadPost` for plain files).
+
+```lua
+local source = require 'devhub.source'
+-- a producer: a read-only buffer of src/a.ts at a commit
+source.set(buf, { root = root, path = 'src/a.ts', rev = sha, label = 'main' })
+-- a consumer
+vim.api.nvim_create_autocmd('User', { pattern = 'DevhubSource', callback = function(ev)
+  local s = ev.data.source              -- nil: the buffer shows nothing any more
+  if s and s.root == my_root then decorate(ev.data.buf, s.path, s.rev) end
+end })
+source.get(buf)                          -- the descriptor (derived for plain files) or nil
+source.list { root = root, path = 'src/a.ts' }   -- { { buf, source }, ... } loaded now
+source.is_worktree(desc), source.matches(desc, filter), source.validate(desc)
+```
+
+Which revisions a consumer decorates is its own choice: threads written
+against the work tree belong on `rev = 'worktree'` buffers; something
+recorded at a commit belongs where `rev` is that commit.
+
 ## Options
 
 ```lua
@@ -314,7 +363,8 @@ tests/run.sh   # nvim --headless: startup highlights are the theme file's
                # table, every group, before any event; a live switch and back is identical; a
                # replaced file is followed; setup() outside DevHub is a no-op;
                # the component builders, the GUI facade over a stand-in for
-               # DevHub, and :ReviewRelay against a fake review-relay CLI
+               # DevHub, and :ReviewRelay against a fake review-relay CLI;
+               # devhub.source (derived and set sources, the event, list)
 tests/fixtures/regenerate.sh <DevHub checkout>  # the fixtures, from DevHub's generator
 ```
 
