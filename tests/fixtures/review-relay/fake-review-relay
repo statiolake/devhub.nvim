@@ -1,0 +1,9 @@
+#!/bin/sh
+# review-relay's CLI, as the adapter's tests see it: `comments list` answers
+# the fixture; every other command is logged.
+dir=$(dirname "$0")
+echo "review-relay $*" >> "$REVIEW_RELAY_TEST_LOG"
+case "$*" in
+  *"comments list"*) cat "$dir/comments.json" ;;
+  *) echo '{}' ;;
+esac
