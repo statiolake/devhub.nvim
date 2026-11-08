@@ -31,6 +31,12 @@ end
 function core.notify(opts)
   table.insert(calls.notify, opts)
 end
+function core.history()
+  return { { msg = 'kept' } }
+end
+function core.clear_history()
+  calls.cleared_history = true
+end
 
 -- 1. Outside DevHub: harmless.
 local gui = require('devhub').gui
@@ -41,6 +47,7 @@ check(h and h.pending, 'a view outside DevHub is a pending handle')
 h:update()
 h:close()
 check(gui.override_notify() == false, 'override_notify outside DevHub')
+check(#gui.history() == 0, 'no history outside DevHub')
 check(gui.popup { component = ui.md 'x' } == nil, 'a popup outside DevHub is nil')
 -- The LSP float hook leaves Neovim's own float outside DevHub.
 gui.hook_floats()
@@ -87,6 +94,9 @@ check(calls.view_updates == 1, 'a handle forwards its methods')
 check(gui.override_notify() == true, 'override_notify in DevHub')
 vim.notify('hello', vim.log.levels.WARN, { title = 'test' })
 check(calls.notify[1] and calls.notify[1].msg == 'hello' and calls.notify[1].group == 'test', 'vim.notify forwarded')
+check(gui.history()[1].msg == 'kept', 'history forwarded')
+gui.clear_history()
+check(calls.cleared_history, 'clear_history forwarded')
 
 -- LSP floats as popups: hover, signature help, diagnostics.
 calls.popup = {}

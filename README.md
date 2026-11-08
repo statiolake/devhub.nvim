@@ -251,6 +251,10 @@ lines at the bottom right above the status line, under their source
 spinner, the work's title and its percentage, ticked when done. Outside
 DevHub nothing changes.
 
+`gui.history()` answers the notifications DevHub has shown, oldest first
+(`time`, `group`, `title`, `msg`, `level`; at most 200, LSP work only once
+done); `gui.clear_history()` forgets them.
+
 ## review-relay: `:ReviewRelay`
 
 [review-relay](https://github.com/statiolake/review-relay)'s review, inside

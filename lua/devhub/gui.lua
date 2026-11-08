@@ -122,6 +122,22 @@ function M.notify(opts)
   notify(tostring(opts.msg or opts.body or ''), level, { title = opts.title })
 end
 
+--- The notifications DevHub has shown, oldest first (at most 200, LSP work
+--- only once done): { time = os.time(), group, title, msg, level, key }.
+--- Empty outside DevHub, or with a DevHub that does not keep them.
+function M.history()
+  local c = core()
+  return c and c.history and c.history() or {}
+end
+
+--- Forget them.
+function M.clear_history()
+  local c = core()
+  if c and c.clear_history then
+    c.clear_history()
+  end
+end
+
 local overridden = false
 
 --- vim.notify drawn by DevHub (gui.notify) in DevHub's GUI, with LSP
