@@ -22,6 +22,8 @@ M.config = {
   auto = true,
   -- Follow changes: `User DevhubTheme` and the theme file.
   follow = true,
+  -- In DevHub's GUI, vim.notify drawn by DevHub (fidget-like, with LSP progress).
+  notify = false,
   -- Run after the highlights are set, with the theme: for your own tweaks.
   on_apply = nil,
 }
@@ -500,6 +502,9 @@ function M.setup(options)
   M.config = vim.tbl_extend('force', M.config, options or {})
   if M.gui.available() then
     M.gui.hook_floats_on_lsp()
+    if M.config.notify then
+      M.gui.override_notify()
+    end
   end
   if not M.inside() then
     return

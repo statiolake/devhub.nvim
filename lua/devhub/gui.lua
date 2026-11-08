@@ -98,9 +98,12 @@ function M.close(handle)
   end
 end
 
---- A native toast: notify{ title = 'Build', msg = 'done', level = 'info' }.
---- level: 'info' | 'warn' | 'error' | 'debug' or vim.log.levels.*.
---- Outside DevHub: vim.notify(msg, level, { title = title }).
+--- A notification, drawn by DevHub as fidget draws: bottom right, under its
+--- source's name, fading when its time is up.
+--- notify{ msg = 'done', title = 'Build', level = 'info' | 'warn' | 'error' |
+---   'debug' | vim.log.levels.*, group = 'source', key = 'id', timeout = ms,
+---   progress = true, percent = 0..100, done = bool }; a key updates the
+--- notification it named. Outside DevHub: vim.notify(msg, level, { title }).
 function M.notify(opts)
   if type(opts) ~= 'table' then
     opts = { msg = opts }
@@ -115,7 +118,76 @@ function M.notify(opts)
   if type(level) == 'string' then
     level = vim.log.levels[level:upper()] or vim.log.levels.INFO
   end
-  vim.notify(tostring(opts.msg or opts.body or ''), level, { title = opts.title })
+  local notify = M._original_notify or vim.notify
+  notify(tostring(opts.msg or opts.body or ''), level, { title = opts.title })
+end
+
+local overridden = false
+
+--- vim.notify drawn by DevHub (gui.notify) in DevHub's GUI, with LSP
+--- progress (spinner, title, percentage) as fidget shows it. Outside DevHub
+--- this does nothing and answers false. setup{ notify = true } calls it.
+function M.override_notify()
+  if not M.available() then
+    return false
+  end
+  if overridden then
+    return true
+  end
+  overridden = true
+  M._original_notify = vim.notify
+  vim.notify = function(msg, level, opts)
+    opts = opts or {}
+    M.notify {
+      msg = type(msg) == 'string' and msg or vim.inspect(msg),
+      level = level,
+      title = opts.title,
+      group = opts.group or opts.title,
+      key = opts.key or opts.id,
+      timeout = type(opts.timeout) == 'number' and opts.timeout or nil,
+    }
+  end
+  M.lsp_progress()
+  return true
+end
+
+--- LSP progress ($/progress, Neovim 0.10+) as notifications grouped by the
+--- client's name: a spinner and the percentage while it works, a tick when done.
+function M.lsp_progress()
+  if vim.fn.exists '##LspProgress' == 0 then
+    return
+  end
+  vim.api.nvim_create_autocmd('LspProgress', {
+    group = vim.api.nvim_create_augroup('devhub_gui_lsp_progress', { clear = true }),
+    callback = function(ev)
+      local data = ev.data or {}
+      local params = data.params or {}
+      local value = params.value
+      if type(value) ~= 'table' or not value.kind then
+        return
+      end
+      local client = vim.lsp.get_client_by_id(data.client_id)
+      local key = 'lsp:' .. tostring(data.client_id) .. ':' .. tostring(params.token)
+      M._progress = M._progress or {}
+      if value.kind == 'begin' then
+        M._progress[key] = value.title or ''
+      end
+      local title = M._progress[key] or value.title or ''
+      local done = value.kind == 'end'
+      M.notify {
+        group = client and client.name or 'LSP',
+        key = key,
+        title = title,
+        msg = value.message or (done and 'done' or ''),
+        percent = value.percentage,
+        progress = true,
+        done = done,
+      }
+      if done then
+        M._progress[key] = nil
+      end
+    end,
+  })
 end
 
 --- An image under line `line` (1-based) of `buf` (0: the current one).
@@ -132,6 +204,119 @@ end
 function M.rich_float(win, markdown)
   local c = core()
   return c and c.rich_float and c.rich_float(win, markdown) or nil
+end
+
+-- Buffer-backed GUI: views, inline cards, decorations. ---------------------
+
+--- The component builders (lua/devhub/ui.lua).
+M.ui = require 'devhub.ui'
+
+-- A handle that works before DevHub attaches (and outside it, as a no-op):
+-- the call is made at the attach, and the handle then forwards to the real one.
+local function deferred(call)
+  local handle = { pending = true }
+  local real
+  with_core(function(c)
+    real = call(c)
+    handle.pending = false
+    if real then
+      handle.id, handle.buf, handle.win = real.id, real.buf, real.win
+    end
+  end)
+  setmetatable(handle, {
+    __index = function(_, method)
+      return function(_, ...)
+        if real and real[method] then
+          return real[method](real, ...)
+        end
+      end
+    end,
+  })
+  return handle
+end
+
+local function check_component(where, node)
+  local ok, err = M.ui.validate(node)
+  if not ok then
+    error('devhub.gui.' .. where .. ': ' .. err, 3)
+  end
+end
+
+--- A panel backed by a buffer: one buffer line per item (your adapter writes
+--- the lines — they stay searchable text), each drawn by DevHub as a
+--- component over every window showing the buffer, as tall as it draws.
+--- The cursor line is the focused item; Neovim keeps the keys.
+---   opts.buf    the buffer (0: the current one)
+---   opts.win    a window, or 'vsplit' | 'split' | 'float' | 'current' to open one
+---   opts.items  fn(lnum, line) -> component | nil, or { [lnum] = component }
+---               (nil: the line's own text, plainly)
+---   opts.on_click fn(lnum): a click on an item (after the cursor moved there)
+---   opts.keys   { { 'j/k', 'move' }, { '<CR>', 'open' } }: the hint line
+--- Answers a handle: :update(items?) to draw again, :close(). Outside DevHub
+--- the buffer is just text and the handle does nothing.
+function M.view(opts)
+  opts = opts or {}
+  if type(opts.items) == 'table' then
+    for lnum, node in pairs(opts.items) do
+      check_component('view (item ' .. tostring(lnum) .. ')', node)
+    end
+  elseif opts.items ~= nil and type(opts.items) ~= 'function' then
+    error('devhub.gui.view: items must be a function or a table', 2)
+  end
+  return deferred(function(c)
+    return c.view and c.view(opts)
+  end)
+end
+
+--- A card under line lnum of buf, in rows Neovim reserves (virt_lines) and
+--- DevHub fills; as tall as it draws. It follows scrolling, folds and window
+--- moves. opts: { buf, lnum, component, id?, range = { first, last }? }.
+--- The same id in the same buffer updates that card. The cursor on the
+--- range (default: lnum) marks the card active; your buffer-local keymaps
+--- on those lines are its keys. Answers a handle: :update(component),
+--- :move(lnum), :clear(). Outside DevHub nothing is reserved.
+function M.inline(opts)
+  opts = opts or {}
+  check_component('inline', opts.component)
+  return deferred(function(c)
+    return c.inline and c.inline(opts)
+  end)
+end
+
+--- Ring an inline card as focused (or not), whatever the cursor says.
+function M.inline_focus(handle, on)
+  local c = core()
+  if c and c.inline_focus and handle then
+    c.inline_focus(handle.id or handle, on)
+  end
+end
+
+--- Every inline card of buf (nil: all), cleared.
+function M.inline_clear_all(buf)
+  local c = core()
+  if c and c.inline_clear_all then
+    c.inline_clear_all(buf)
+  end
+end
+
+--- Paint a line range over every window showing it (diff windows too):
+--- opts: { buf, range = { first, last }, style = 'dim' | 'highlight' | 'tag',
+--- tag = 'NEW since viewed'?, hl = group or tone? }. Answers a handle: :clear().
+function M.decorate(opts)
+  opts = opts or {}
+  if opts.style and opts.style ~= 'dim' and opts.style ~= 'highlight' and opts.style ~= 'tag' then
+    error("devhub.gui.decorate: style must be 'dim', 'highlight' or 'tag'", 2)
+  end
+  return deferred(function(c)
+    return c.decorate and c.decorate(opts)
+  end)
+end
+
+function M.decorate_clear_all(buf)
+  local c = core()
+  if c and c.decorate_clear_all then
+    c.decorate_clear_all(buf)
+  end
 end
 
 local hooked = false
