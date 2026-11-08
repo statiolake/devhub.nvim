@@ -9,9 +9,11 @@
 --   * for the Neovims DevHub draws, `User DevhubTheme` with the same object
 --     as its data.
 --
--- This module applies that table, as DevHub itself applies it to the Neovims
--- it draws. Startup and every live change go through `apply(theme)`, so the
--- first frame and a switch an hour later are coloured from the same value.
+-- This module wears it, as DevHub itself does in the Neovims it draws: the
+-- theme's own Neovim colorscheme (`neovim.colorscheme`, e.g. `min-dark`) when
+-- `:colorscheme` finds it, else that table as `devhub`. Startup and every
+-- live change go through `wear(theme)`, so the first frame and a switch an hour
+-- later are coloured from the same value.
 
 local M = {}
 
@@ -89,6 +91,74 @@ function M.apply(theme)
   end
 end
 
+--- Whether the colorscheme worn now is DevHub's to change: none chosen yet,
+--- the generated `devhub`, or a theme's own colorscheme DevHub put on
+--- (`g:devhub_colorscheme`). A colorscheme your config chose is never.
+local function ours()
+  local chosen = vim.g.colors_name
+  return chosen == nil or chosen == 'devhub' or (chosen ~= '' and chosen == vim.g.devhub_colorscheme)
+end
+M.ours = ours
+
+--- Say once per Neovim that a theme's own colorscheme is not installed. The
+--- same record as DevHub's own apply path keeps, so it is said once in all.
+local function hint(theme, name)
+  local said = vim.g.devhub_colorscheme_missing or ''
+  if said:find('|' .. name .. '|', 1, true) then
+    return
+  end
+  vim.g.devhub_colorscheme_missing = said .. '|' .. name .. '|'
+  local plugin = type(theme.neovim.plugin) == 'string' and theme.neovim.plugin or 'a plugin that has it'
+  vim.schedule(function()
+    vim.notify(
+      string.format(
+        "DevHub: %s is meant to be worn as the colorscheme %s (%s). Install it to wear it; until then DevHub's generated colours are worn.",
+        theme.name,
+        name,
+        plugin
+      ),
+      vim.log.levels.INFO
+    )
+  end)
+end
+
+--- Wear `theme`: its own Neovim colorscheme (`theme.neovim.colorscheme`) when
+--- `:colorscheme` finds it — lazy.nvim loads a `lazy = true` plugin that has
+--- it at that moment — else DevHub's generated one, `:colorscheme devhub`.
+--- Either way through `:colorscheme`, so your ColorScheme autocommands run.
+--- Returns whether the theme's own colorscheme is worn.
+function M.wear(theme)
+  local scheme = theme.neovim
+  local own = scheme.colorscheme
+  if type(own) == 'string' and own ~= '' then
+    if vim.g.colors_name == own and vim.o.background == scheme.background then
+      M.current = theme
+      return true
+    end
+    -- Before it, so a colorscheme that sets its own terminal colours wins.
+    for index, color in ipairs(scheme.terminal) do
+      vim.g['terminal_color_' .. (index - 1)] = color
+    end
+    -- Unset first: setting 'background' while a colorscheme is named reloads it.
+    vim.g.colors_name = nil
+    vim.o.termguicolors = true
+    vim.o.background = scheme.background
+    if pcall(vim.cmd.colorscheme, own) then
+      vim.g.devhub_colorscheme = own
+      M.current = theme
+      if M.config.on_apply then
+        M.config.on_apply(theme)
+      end
+      return true
+    end
+    hint(theme, own)
+  end
+  vim.g.devhub_colorscheme = nil
+  M.pending = theme
+  vim.cmd.colorscheme 'devhub'
+  return false
+end
+
 --- `:colorscheme devhub`: the theme DevHub publishes now. Outside DevHub
 --- there is none, and that is said rather than painting something else.
 function M.load()
@@ -116,16 +186,15 @@ local watcher
 local followed = false
 
 local function reapply(theme)
-  if vim.g.colors_name ~= 'devhub' or not theme then
+  if not ours() or not theme then
     return
   end
   if M.current and vim.deep_equal(M.current, theme) then
     return
   end
-  -- Through `:colorscheme`, as at startup: the same code, and your
-  -- ColorScheme autocommands run after it the same way.
-  M.pending = theme
-  vim.cmd.colorscheme 'devhub'
+  -- As at startup: the same code, and your ColorScheme autocommands run
+  -- after it the same way.
+  M.wear(theme)
 end
 
 local function follow()
@@ -136,6 +205,8 @@ local function follow()
   vim.api.nvim_create_autocmd('User', {
     group = group,
     pattern = 'DevhubTheme',
+    -- Nested: the :colorscheme it runs fires ColorScheme, for your autocommands.
+    nested = true,
     callback = function(event)
       local theme = valid(event.data) or M.read()
       reapply(theme)
@@ -183,7 +254,12 @@ function M.setup(options)
     follow()
   end
   if M.config.auto and vim.g.colors_name ~= 'devhub' then
-    vim.cmd.colorscheme 'devhub'
+    local theme = M.read()
+    if theme then
+      M.wear(theme)
+    else
+      vim.cmd.colorscheme 'devhub'
+    end
   end
 end
 
@@ -204,7 +280,10 @@ function M._startup()
     follow()
   end
   if M.config.auto and vim.g.devhub_auto ~= false and not vim.g.colors_name then
-    vim.cmd.colorscheme 'devhub'
+    local theme = M.read()
+    if theme then
+      M.wear(theme)
+    end
   end
 end
 

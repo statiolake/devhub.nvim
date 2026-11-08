@@ -112,7 +112,67 @@ vim.env.DEVHUB_THEME_FILE = bare
 check(devhub.read() == nil, 'a theme without `neovim` was read')
 os.remove(bare)
 
--- 6. Outside DevHub, setup does nothing.
+-- 6. A theme with its own colorscheme: worn where `:colorscheme` finds it
+-- (here a plugin on the runtimepath), live both ways; where it does not, the
+-- generated table, and a hint said once.
+local plugin = vim.fn.tempname()
+vim.fn.mkdir(plugin .. '/colors', 'p')
+local scheme_file = assert(io.open(plugin .. '/colors/devhub-test-own.lua', 'w'))
+scheme_file:write [[
+vim.cmd 'highlight clear'
+vim.api.nvim_set_hl(0, 'Normal', { fg = '#010203', bg = '#fefdfc' })
+vim.g.colors_name = 'devhub-test-own'
+]]
+scheme_file:close()
+vim.opt.runtimepath:append(plugin)
+local said = {}
+local notify = vim.notify
+vim.notify = function(message)
+  table.insert(said, message)
+end
+local schemes = {}
+vim.api.nvim_create_autocmd('ColorScheme', {
+  callback = function(event)
+    table.insert(schemes, event.match)
+  end,
+})
+local mine = vim.deepcopy(other)
+mine.name = 'Mine'
+mine.neovim.colorscheme = 'devhub-test-own'
+mine.neovim.plugin = 'someone/colors.nvim'
+local absent = vim.deepcopy(mine)
+absent.name = 'Absent'
+absent.neovim.colorscheme = 'devhub-test-absent'
+local function tell(value)
+  vim.api.nvim_exec_autocmds('User', { pattern = 'DevhubTheme', data = value })
+end
+tell(mine)
+check(vim.g.colors_name == 'devhub-test-own', 'own colorscheme not worn: ' .. tostring(vim.g.colors_name))
+check(hex(vim.api.nvim_get_hl(0, { name = 'Normal' }).bg) == '#fefdfc', 'own colorscheme Normal')
+check(vim.o.background == mine.neovim.background, 'background before the own colorscheme')
+tell(theme)
+check(vim.g.colors_name == 'devhub', 'back to the generated table: ' .. tostring(vim.g.colors_name))
+tell(absent)
+tell(theme)
+tell(absent)
+vim.wait(50)
+check(vim.g.colors_name == 'devhub', 'a missing colorscheme is not the generated table')
+check(hex(vim.api.nvim_get_hl(0, { name = 'Normal' }).bg) == absent.neovim.highlights.Normal.bg, 'missing: Normal')
+check(#said == 1 and said[1]:find('someone/colors.nvim', 1, true) ~= nil, 'the hint, once: ' .. vim.inspect(said))
+tell(mine)
+check(vim.g.colors_name == 'devhub-test-own', 'own colorscheme, live again')
+check(
+  table.concat(schemes, ' ') == 'devhub-test-own devhub devhub devhub devhub devhub-test-own',
+  'ColorScheme events: ' .. table.concat(schemes, ' ')
+)
+-- A colorscheme of your own is left alone, even over an own one.
+vim.cmd 'colorscheme habamax'
+tell(theme)
+check(vim.g.colors_name == 'habamax', 'a chosen colorscheme was painted over')
+vim.notify = notify
+vim.fn.delete(plugin, 'rf')
+
+-- 7. Outside DevHub, setup does nothing.
 vim.env.DEVHUB_THEME_FILE = nil
 vim.env.DEVHUB_THEME_COLORS = nil
 package.loaded.devhub = nil

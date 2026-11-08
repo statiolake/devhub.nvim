@@ -18,9 +18,8 @@ frame. See DevHub's `docs/themes.md` ("Neovim") for how the table is made.
 plugins and, when no colorscheme has been chosen yet, applies it there — so no
 frame is ever drawn in the default (or any other) colorscheme first. A live
 change, whether it arrives as `User DevhubTheme` over RPC or as the file being
-replaced, goes through the same `:colorscheme devhub`, the same function and
-the same value, so the colours after a switch are identical to the ones at
-startup.
+replaced, goes through the same function and the same value, so the colours
+after a switch are identical to the ones at startup.
 
 ## Install
 
@@ -44,9 +43,28 @@ With lazy.nvim:
 
 `setup()` does nothing outside DevHub, so it is safe to call everywhere.
 
+## A theme's own colorscheme
+
+A theme can name a Neovim colorscheme of its own (`neovim.colorscheme` in
+`theme.json`: TokyoNight's `tokyonight-night`, a custom theme's
+`neovim_colorscheme` in DevHub's settings). Then `background` and the
+terminal colours are set from the theme and `:colorscheme <name>` is run; your
+`ColorScheme` autocommands run after it as after any. With lazy.nvim the
+plugin that has it can be lazy — lazy loads a colorscheme plugin when
+`:colorscheme` asks for one of its colorschemes, at startup too:
+
+```lua
+{ 'statiolake/min-theme.nvim', lazy = true },
+```
+
+Where `:colorscheme` cannot find it, DevHub's generated table is worn (below)
+and a notification says once which plugin to install (`neovim.plugin`). A
+colorscheme your config chose itself is never painted over; one DevHub put on
+(`g:devhub_colorscheme`) follows the theme.
+
 ## What it sets
 
-Exactly DevHub's table (`neovim` in `theme.json`), applied as a colorscheme
+Without a colorscheme of the theme's own: exactly DevHub's table (`neovim` in `theme.json`), applied as a colorscheme
 file applies itself: `highlight clear`, `background`, every group in
 `neovim.highlights` (the editor, syntax, Tree-sitter, LSP, diagnostics, diffs,
 and gitsigns / blink.cmp / snacks / fidget / nvim-tree), and

@@ -937,7 +937,9 @@
       "#6639ba",
       "#1f6feb",
       "#1f2328"
-    ]
+    ],
+    "colorscheme": "vscode-2026-light",
+    "plugin": "statiolake/vscode-2026-theme.nvim"
   },
   "fzf": "fg:#202020,bg:#ffffff,hl:#0550ae,fg+:#202020,bg+:#bfd9f2,hl+:#0969da,info:#b69500,prompt:#0550ae,pointer:#8250df,marker:#116329,spinner:#8250df,header:#0069cc,border:#606060,gutter:#ffffff,query:#202020"
 }
