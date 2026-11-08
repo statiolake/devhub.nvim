@@ -1,8 +1,20 @@
 #!/bin/sh
 # review-relay's CLI, as the adapter's tests see it: `comments list` answers
-# the fixture; every other command is logged.
+# the fixture; `--no-window` is a viewer that writes its session descriptor
+# and serves until stopped; every other command is logged.
 dir=$(dirname "$0")
 echo "review-relay $*" >> "$REVIEW_RELAY_TEST_LOG"
+case "$1" in
+  --no-window)
+    sessions="${TMPDIR:-/tmp}/review-relay/sessions"
+    mkdir -p "$sessions"
+    file="$sessions/fake-$$.json"
+    echo '{"version":2,"endpoint":"http://127.0.0.1:1","root":"'"$REVIEW_RELAY_TEST_ROOT"'"}' > "$file"
+    trap 'rm -f "$file"; echo "review-relay stopped" >> "$REVIEW_RELAY_TEST_LOG"; exit 0' TERM INT
+    echo "http://127.0.0.1:1/"
+    while :; do sleep 0.1; done
+    ;;
+esac
 case "$*" in
   *"comments list"*) cat "$dir/comments.json" ;;
   *) echo '{}' ;;

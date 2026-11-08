@@ -17,8 +17,10 @@
 --   Resolve; r and s on the thread's lines do the same.
 --
 -- Outside DevHub's GUI the panel is the same buffer, as text, and the keys
--- work; threads show as signs. review-relay must be running for the
--- workspace (`review-relay main...HEAD`, or `--no-window`).
+-- work; threads show as signs. When no review-relay viewer holds the
+-- workspace, :ReviewRelay [git diff args] starts one without a window
+-- (`review-relay --no-window`) and stops it again on :ReviewRelay stop or
+-- when Neovim exits.
 
 local M = {}
 
@@ -70,6 +72,7 @@ local state = {
   cards = {}, -- buf -> { [thread id] = handle }
   events = nil,
   seen = nil,
+  server = nil, -- the --no-window viewer this adapter started: its job id
 }
 M._state = state
 
@@ -119,6 +122,9 @@ local function decode(text)
 end
 
 local function warn(message)
+  if vim.trim(message or '') == '' then
+    return
+  end
   vim.notify('review-relay: ' .. message, vim.log.levels.WARN, { title = 'review-relay' })
 end
 
@@ -126,7 +132,8 @@ local function cli(args, cb)
   local argv = { M.config.cmd, '--endpoint', state.endpoint }
   vim.list_extend(argv, args)
   run(argv, function(ok, out, err)
-    if not ok then
+    -- Not once the review is stopped: what was in flight then fails quietly.
+    if not ok and state.endpoint then
       warn(vim.trim(err ~= '' and err or out))
     end
     cb(ok, ok and decode(out) or nil)
@@ -141,7 +148,7 @@ local function http(method, path, body, cb)
     stdin = vim.json.encode(body)
   end
   run(argv, function(ok, out, err)
-    if not ok then
+    if not ok and state.endpoint then
       warn(vim.trim(out ~= '' and out or err))
     end
     cb(ok, ok and decode(out) or nil)
@@ -891,11 +898,85 @@ local function follow()
   end
 end
 
+--- Start a viewer without a window for dir (default: the current
+--- directory): `review-relay --no-window [-- diff_args]` — no diff_args is
+--- review-relay's own default, the files of the directory. cb(ok) once it
+--- is up (its session found) or has failed. It is stopped by M.stop() and
+--- when Neovim exits.
+function M.start_server(dir, diff_args, cb)
+  dir = dir or vim.fn.getcwd()
+  local argv = { M.config.cmd, '--no-window' }
+  if diff_args and #diff_args > 0 then
+    table.insert(argv, '--')
+    vim.list_extend(argv, diff_args)
+  end
+  local err = {}
+  local done = false
+  local function finish(ok, message)
+    if done then
+      return
+    end
+    done = true
+    if not ok then
+      warn(message)
+    end
+    cb(ok)
+  end
+  local ok, job = pcall(vim.fn.jobstart, argv, {
+    cwd = dir,
+    on_stderr = function(_, data)
+      vim.list_extend(err, data)
+    end,
+    on_exit = function(id, code)
+      vim.schedule(function()
+        if state.server == id then
+          state.server = nil
+        end
+        finish(false, 'the viewer it started exited (' .. code .. '): ' .. vim.trim(table.concat(err, '\n')))
+      end)
+    end,
+  })
+  if not ok or job <= 0 then
+    finish(false, 'cannot run ' .. tostring(M.config.cmd))
+    return
+  end
+  state.server = job
+  -- Its session is written once it listens: then it is found as any viewer.
+  local tries = 0
+  local function look()
+    if done then
+      return
+    end
+    if M.find(dir) then
+      local what = diff_args and #diff_args > 0 and table.concat(diff_args, ' ') or 'the files'
+      vim.notify('started a viewer for ' .. what .. ' (no window)', vim.log.levels.INFO, { title = 'review-relay' })
+      finish(true)
+      return
+    end
+    tries = tries + 1
+    if tries > 50 then
+      M.stop_server()
+      finish(false, 'the viewer it started did not come up')
+      return
+    end
+    vim.defer_fn(look, 100)
+  end
+  look()
+end
+
+--- Stop the viewer this adapter started, if it did.
+function M.stop_server()
+  if state.server then
+    pcall(vim.fn.jobstop, state.server)
+    state.server = nil
+  end
+end
+
 --- Connect to the viewer for dir (default: the current directory).
 function M.connect(dir)
   local endpoint, root = M.find(dir)
   if not endpoint then
-    warn 'no running review-relay viewer contains this directory; start one with `review-relay <diff>`'
+    warn 'no running review-relay viewer contains this directory'
     return false
   end
   state.endpoint = endpoint
@@ -1035,13 +1116,30 @@ function M.set_filter(filter)
   draw_panel()
 end
 
---- :ReviewRelay — the panel (opened, or focused when it is open).
-function M.open_panel()
+--- :ReviewRelay [git diff args] — the panel (opened, or focused when it is
+--- open). With no viewer for the directory, one is started without a
+--- window, for diff_args (none: review-relay's default, the files).
+function M.open_panel(diff_args)
   if not M._setup then
     M.setup()
   end
-  if not state.endpoint and not M.connect() then
-    return
+  if not state.endpoint then
+    if not M.find() then
+      if state.starting then
+        return
+      end
+      state.starting = true
+      M.start_server(nil, diff_args, function(ok)
+        state.starting = false
+        if ok then
+          M.open_panel()
+        end
+      end)
+      return
+    end
+    if not M.connect() then
+      return
+    end
   end
   local panel = state.panel
   if panel and vim.api.nvim_buf_is_valid(panel.buf) then
@@ -1110,6 +1208,17 @@ end
 
 local group = vim.api.nvim_create_augroup('devhub_review_relay', { clear = true })
 
+-- A viewer this adapter started goes when Neovim does.
+vim.api.nvim_create_autocmd('VimLeavePre', {
+  group = group,
+  callback = function()
+    if state.server then
+      state.endpoint = nil
+      M.stop_server()
+    end
+  end,
+})
+
 --- Commands and autocommands. Called by plugin/devhub.lua's :ReviewRelay on
 --- first use; call it yourself to change the options.
 function M.setup(opts)
@@ -1143,6 +1252,7 @@ function M.stop()
   end
   state.cards = {}
   state.endpoint = nil
+  M.stop_server()
 end
 
 return M

@@ -241,6 +241,25 @@ vim.api.nvim_feedkeys('rX', 'x', false)
 check(vim.api.nvim_get_current_line() == 'Xine 1', 'r outside a thread replaces a character')
 rr.stop()
 
+-- No viewer for the directory: :ReviewRelay [args] starts one without a
+-- window, and :ReviewRelay stop stops it.
+rr.config.endpoint = nil
+vim.env.TMPDIR = vim.fn.tempname()
+vim.fn.mkdir(vim.env.TMPDIR, 'p')
+check(rr.find(root) == nil, 'no viewer yet')
+vim.cmd 'ReviewRelay main...HEAD'
+check(vim.wait(5000, function()
+  return rr._state.endpoint ~= nil
+end), 'a viewer started and connected')
+check(logged 'review-relay --no-window -- main...HEAD', 'started with --no-window and the diff')
+check(rr._state.server ~= nil, 'the adapter holds the viewer it started')
+vim.cmd 'ReviewRelay stop'
+check(rr._state.server == nil and rr._state.endpoint == nil, 'stopped')
+check(logged 'review-relay stopped', 'the viewer it started was stopped')
+check(vim.wait(2000, function()
+  return rr.find(root) == nil
+end), 'its session is gone')
+
 if #failures > 0 then
   io.stderr:write('FAIL\n  ' .. table.concat(failures, '\n  ') .. '\n')
   vim.cmd 'cquit 1'

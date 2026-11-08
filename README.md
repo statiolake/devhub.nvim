@@ -269,9 +269,13 @@ stream, so a reply from the agent shows at once (and is notified).
   else they are `r` and `s`). A resolved thread folds to one line.
 - `:ReviewRelay refresh`, `:ReviewRelay stop`.
 
-A viewer must be running for the workspace (`review-relay main...HEAD`, or
-`review-relay --no-window main...HEAD`). Outside DevHub's GUI the panel is the
-same buffer as text, the keys work, threads are signs.
+A viewer already running for the workspace (`review-relay main...HEAD`) is
+used as it is. With none, `:ReviewRelay [git diff args]` starts one without a
+window (`review-relay --no-window [-- args]`; no args: review-relay's own
+default, the files of the directory — `:ReviewRelay main...HEAD` for the
+branch), says so once, and stops it on `:ReviewRelay stop` or when Neovim
+exits — only a viewer it started. Outside DevHub's GUI the panel is the same
+buffer as text, the keys work, threads are signs.
 
 ```lua
 require('devhub.review_relay').setup {
