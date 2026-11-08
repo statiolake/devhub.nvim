@@ -330,6 +330,19 @@ function M.decorate(opts)
   end)
 end
 
+--- Declare that the virtual text and lines of extmark namespace ns (an id or
+--- a name) are content — code, like the deleted lines of an inline diff —
+--- so DevHub draws them in the grid's face as the buffer's own lines, not in
+--- the proportional face it gives words about the code (diagnostics, hints,
+--- notes). on = false undoes it. Outside DevHub nothing changes.
+function M.content_namespace(ns, on)
+  with_core(function(c)
+    if c.content_namespace then
+      c.content_namespace(ns, on)
+    end
+  end)
+end
+
 function M.decorate_clear_all(buf)
   local c = core()
   if c and c.decorate_clear_all then

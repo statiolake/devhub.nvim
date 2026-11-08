@@ -97,6 +97,11 @@ check(calls.notify[1] and calls.notify[1].msg == 'hello' and calls.notify[1].gro
 check(gui.history()[1].msg == 'kept', 'history forwarded')
 gui.clear_history()
 check(calls.cleared_history, 'clear_history forwarded')
+function core.content_namespace(ns, on)
+  calls.content_ns = { ns, on }
+end
+gui.content_namespace(7)
+check(calls.content_ns and calls.content_ns[1] == 7, 'content_namespace forwarded')
 
 -- LSP floats as popups: hover, signature help, diagnostics.
 calls.popup = {}

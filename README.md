@@ -233,6 +233,18 @@ d:clear()
 Painted over every window showing the range, diff windows too; the range
 follows edits.
 
+### `gui.content_namespace`: virtual text that is code
+
+DevHub sets virtual text and virtual lines in its UI face, a step smaller:
+they are usually words about the code (diagnostics, inlay hints, blame).
+When a plugin's virtual lines are code themselves — the deleted lines of an
+inline diff, a hunk preview — it says so, and they stay in the grid's face:
+
+```lua
+local ns = vim.api.nvim_create_namespace 'my_inline_diff'
+require('devhub').gui.content_namespace(ns)        -- false undoes it
+```
+
 ### `gui.popup`: a hover at a buffer position
 
 ```lua
