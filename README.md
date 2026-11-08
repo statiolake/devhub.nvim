@@ -107,10 +107,9 @@ end
   `ui.md(text, { marks = … })`). Neovim 0.10+; outside DevHub or on
   any error, Neovim's own float. Set `vim.g.devhub_rich_floats = false` to
   keep Neovim's always.
-- `:DevhubImageDemo [path]`, `:DevhubGuiDemo` and `:DevhubTerminal [float]`
-  come from DevHub. In `:DevhubTerminal`, keys go to the shell (`<C-w>`
-  deletes a word); `<C-\><C-n>` leaves for terminal-normal mode as in a
-  `:terminal`, and `i`/`a` go back in.
+- `:DevhubImageDemo [path]` and `:DevhubGuiDemo` come from DevHub. There
+  is no DevHub terminal inside Neovim: the Workspace's terminal is DevHub's
+  editor area itself, and Neovim's own `:terminal` is drawn as usual.
 
 ## Buffer-backed GUI: components, views, cards, decorations
 
