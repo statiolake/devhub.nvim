@@ -286,41 +286,6 @@ DevHub nothing changes.
 (`time`, `group`, `title`, `msg`, `level`; at most 200, LSP work only once
 done); `gui.clear_history()` forgets them.
 
-## review-relay: `:ReviewRelay`
-
-[review-relay](https://github.com/statiolake/review-relay)'s review, inside
-Neovim, as a thin adapter: it reads and writes through review-relay's own
-commands and endpoints (`review-relay comments list|resolve|unresolve`, a
-reply as you, `/ui/files`, reviewed marks) and follows the viewer's event
-stream, so a reply from the agent shows at once (and is notified).
-
-- `:ReviewRelay` opens the panel (a `gui.view`): progress, the files with
-  their status, reviewed checkboxes and thread counts, Waiting / Answered /
-  All, the threads, the overall comment. Keys: `<CR>` open (a file, a
-  thread at its line; a directory folds), `<Space>` reviewed, `r` reply,
-  `s` resolve / reopen, `f` filter, `R` refresh, `q` close.
-- In a file of the review each thread is a card under its last line
-  (`gui.inline`): the comments in markdown, who wrote them (you / agent),
-  Reply and Resolve; `r` and `s` on the thread's lines do the same (anywhere
-  else they are `r` and `s`). A resolved thread folds to one line.
-- `:ReviewRelay refresh`, `:ReviewRelay stop`.
-
-A viewer already running for the workspace (`review-relay main...HEAD`) is
-used as it is. With none, `:ReviewRelay [git diff args]` starts one without a
-window (`review-relay --no-window [-- args]`; no args: review-relay's own
-default, the files of the directory — `:ReviewRelay main...HEAD` for the
-branch), says so once, and stops it on `:ReviewRelay stop` or when Neovim
-exits — only a viewer it started. Outside DevHub's GUI the panel is the same
-buffer as text, the keys work, threads are signs.
-
-```lua
-require('devhub.review_relay').setup {
-  cmd = 'review-relay', width = 54, reply_with = 'input', -- or 'buffer' (:w sends)
-  inline_keys = { reply = 'r', resolve = 's' },           -- false: none
-  colors = { agent = 'Function', human = 'DiagnosticInfo', waiting = 'DiagnosticWarn' },
-}
-```
-
 ## Options
 
 ```lua
@@ -345,7 +310,7 @@ tests/run.sh   # nvim --headless: startup highlights are the theme file's
                # table, every group, before any event; a live switch and back is identical; a
                # replaced file is followed; setup() outside DevHub is a no-op;
                # the component builders, the GUI facade over a stand-in for
-               # DevHub, and :ReviewRelay against a fake review-relay CLI
+               # DevHub
 tests/fixtures/regenerate.sh <DevHub checkout>  # the fixtures, from DevHub's generator
 ```
 

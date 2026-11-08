@@ -1,8 +1,0 @@
-{"files":[
-{"path":"README.md","status":"M","hash":"h1"},
-{"path":"cmd/comments.go","status":"M","hash":"h2"},
-{"path":"internal/server/assets/app.js","oldPath":"internal/server/assets/ui.js","status":"R","hash":"h3"},
-{"path":"internal/server/events.go","status":"A","hash":"h4"},
-{"path":"internal/store/legacy_json.go","status":"D","hash":"h5"},
-{"path":"internal/store/store.go","status":"M","hash":"h6"}
-],"reviewed":{"README.md":"h1","cmd/comments.go":"h2","internal/store/store.go":"old"}}
