@@ -3,13 +3,14 @@
 Neovim in the colour theme [DevHub](https://github.com/statiolake/devhub)
 wears — from the very first frame, and following every change.
 
-DevHub publishes the VS Code colour theme it wears to the programs in its
-terminals: a JSON file (`$DEVHUB_THEME_FILE`, by default
-`~/.local/state/devhub/theme.json`), a few `DEVHUB_*` variables in every new
-pane, and, for the Neovim DevHub manages, a `User DevhubTheme` event with the
-same object. This plugin is a colorscheme made from that object: the terminal
-palette, the editor's colours as VS Code resolves them, and the syntax colours
-from the theme's `tokenColors`.
+DevHub publishes the theme it wears to the programs in its terminals, with the
+Neovim colorscheme it generates from it: a JSON file (`$DEVHUB_THEME_FILE`, by
+default `~/.local/state/devhub/theme.json`) and, for the Neovims DevHub draws,
+a `User DevhubTheme` event with the same object. This plugin wears that
+colorscheme — the object's `neovim` table, the very one DevHub applies to the
+Neovims it draws — so a Neovim it does not draw (a plain TUI in one of its
+terminals) looks the same, and one it does draw is the same from the first
+frame. See DevHub's `docs/themes.md` ("Neovim") for how the table is made.
 
 ## No flicker
 
@@ -45,18 +46,17 @@ With lazy.nvim:
 
 ## What it sets
 
-- every highlight a colorscheme usually does: the editor (`Normal`,
-  `CursorLine`, `LineNr`, `StatusLine`, `Pmenu`, `Visual`, `Search`, diffs, …);
-- syntax groups, Tree-sitter captures (`@keyword`, `@function.call`,
-  `@variable.member`, … and the pre-2024 names), LSP semantic tokens
-  (`@lsp.type.*`) and references, diagnostics, gitsigns, Telescope and
-  fzf-lua basics;
-- `g:terminal_color_0` … `g:terminal_color_15`, and `background`.
+Exactly DevHub's table (`neovim` in `theme.json`), applied as a colorscheme
+file applies itself: `highlight clear`, `background`, every group in
+`neovim.highlights` (the editor, syntax, Tree-sitter, LSP, diagnostics, diffs,
+and gitsigns / blink.cmp / snacks / fidget / nvim-tree), and
+`g:terminal_color_0` … `15` from `neovim.terminal`; then `g:colors_name` is
+`devhub` and the `ColorScheme` event fires, so your `ColorScheme`
+autocommands adjust it as they would any other.
 
-Syntax colours come from the theme's `tokenColors` for the scopes DevHub
-publishes; where a theme says nothing about one, the terminal palette fills in.
-On a remote host, where there is no file, the palette in
-`$DEVHUB_THEME_COLORS` is used.
+There is nothing to wear without the file: on a remote host's panes, which get
+only DevHub's `DEVHUB_*` variables, `inside()` is false and `setup()` does
+nothing (a Neovim DevHub draws there is still dressed by DevHub itself).
 
 ## DevHub's GUI: `require('devhub').gui`
 
@@ -293,7 +293,8 @@ require('devhub').setup {
   auto = true,     -- wear the theme at startup when no colorscheme is chosen
   notify = false,  -- vim.notify drawn by DevHub (in its GUI), with LSP progress
   follow = true,   -- follow User DevhubTheme and changes to the file
-  on_apply = function(theme) end, -- your tweaks, after every apply
+  on_apply = function(theme) end, -- your tweaks, after every apply: theme.colors
+                                  -- (background, foreground, ansi[1..16], …), theme.neovim
 }
 ```
 
@@ -305,11 +306,12 @@ fzf-lua's `fzf_opts`.
 ## Tests
 
 ```sh
-tests/run.sh   # nvim --headless: startup highlights match the theme file
-               # before any event; a live switch and back is identical; a
+tests/run.sh   # nvim --headless: startup highlights are the theme file's
+               # table, every group, before any event; a live switch and back is identical; a
                # replaced file is followed; setup() outside DevHub is a no-op;
                # the component builders, the GUI facade over a stand-in for
                # DevHub, and :ReviewRelay against a fake review-relay CLI
+tests/fixtures/regenerate.sh <DevHub checkout>  # the fixtures, from DevHub's generator
 ```
 
 Neovim 0.9 or later.
