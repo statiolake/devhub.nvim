@@ -112,6 +112,20 @@ end
   attach (`User DevhubGui`) for a call made while Neovim is still starting,
   and does nothing (answers `nil`) outside DevHub — `notify` falls back to
   `vim.notify`. So `gui.*` is safe in a config shared with the terminal.
+- **LSP hover, signature help and diagnostic floats as DevHub popups.** In
+  DevHub's GUI, at the first `LspAttach`, `vim.lsp.util.open_floating_preview`
+  is wrapped so that its floats are `gui.popup`s: laid out by DevHub
+  (paragraphs reflowed, fenced code wrapped and highlighted, links that open
+  in the browser), at the cursor, flipping above when there is no room
+  below, scrolling inside when long. `K K` focuses it (`j`/`k`,
+  `<C-d>`/`<C-u>`, `gg`/`G` scroll, `q`/`<Esc>` close, `y` yanks); moving
+  the cursor closes it. The float's `border`/`title` give way to DevHub's
+  frame; `max_width`/`max_height` are kept. Callers still get a buffer and
+  a (hidden) window back, as from Neovim, and the highlights they put on
+  its code are drawn (signature help's active parameter, through
+  `ui.md(text, { marks = … })`). Outside DevHub or on
+  any error, Neovim's own float. Set `vim.g.devhub_rich_floats = false` to
+  keep Neovim's always.
 - `:DevhubImageDemo [path]` and `:DevhubGuiDemo` come from DevHub. There
   is no DevHub terminal inside Neovim: the Workspace's terminal is DevHub's
   editor area itself, and Neovim's own `:terminal` is drawn as usual.
