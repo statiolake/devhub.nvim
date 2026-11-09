@@ -67,7 +67,7 @@ vim.api.nvim_create_autocmd('User', {
   end,
 })
 
---- A GUI window: web content DevHub paints over a Neovim window.
+--- A webview: web content DevHub paints over a Neovim window.
 --- opts: { title, html | url, win = 'vsplit' | 'split' | 'float' | 'tab' | 'current',
 ---   keyboard = 'neovim' | 'content' }.
 --- keyboard: 'neovim' (an html page's default) keeps the keys Neovim's, as
@@ -76,33 +76,12 @@ vim.api.nvim_create_autocmd('User', {
 --- (insert mode) and <Esc> leaves it. 'content' gives the page the keys
 --- while its window is current (<C-w> gives them back); a url page's default
 --- and only choice.
---- Answers a handle (nil outside DevHub, or while it has not attached yet).
-function M.open(opts)
+--- Answers a handle — :send(message) (the page's devhub.onMessage(fn) gets
+--- it), :on_message(fn) (every devhub.send(message) of the page), :close() —
+--- or nil outside DevHub, or while it has not attached yet.
+function M.webview(opts)
   local c = core()
-  return c and c.open(opts) or nil
-end
-
---- Send a GUI window's page a message (its devhub.onMessage(fn) gets it).
-function M.send(handle, message)
-  local c = core()
-  if c and handle then
-    c.send(handle, message)
-  end
-end
-
---- fn(message) for every devhub.send(message) of the window's page.
-function M.on_message(handle, fn)
-  local c = core()
-  if c and handle then
-    c.on_message(handle, fn)
-  end
-end
-
-function M.close(handle)
-  local c = core()
-  if c and handle then
-    c.close(handle)
-  end
+  return c and c.webview(opts) or nil
 end
 
 --- A notification, drawn by DevHub as fidget draws: bottom right, under its
@@ -236,7 +215,7 @@ function M.image(buf, line, src, opts)
 end
 
 
--- Buffer-backed GUI: views, inline cards, decorations. ---------------------
+-- Buffer-backed GUI: views (framed or not), inline cards. -------------------
 
 --- The component builders (lua/devhub/ui.lua).
 M.ui = require 'devhub.ui'
@@ -279,11 +258,27 @@ end
 ---   opts.buf    the buffer (0: the current one)
 ---   opts.win    a window, or 'vsplit' | 'split' | 'float' | 'current' to open one
 ---   opts.items  fn(lnum, line) -> component | nil, or { [lnum] = component }
----               (nil: the line's own text, plainly)
----   opts.on_click fn(lnum): a click on an item (after the cursor moved there)
+---               (nil: the line's own text, plainly; { node, heading }: a
+---               heading above the item, which is not an item)
+---   opts.on_click fn(lnum, clicks): a click on an item (after the cursor
+---               moved there; in a frame the keys stay in its query)
+---   opts.frame  { win, query = { win, placeholder? }, preview = { win, title? },
+---               title?, status? }: draw the view in a frame over the float
+---               win instead of over its window — a picker's frontend. Your
+---               plugin lays the windows out; DevHub draws each part where its
+---               window stands: the items in the cells of the window showing
+---               buf (hide it: hide = true), whose cursor line is the focus; a
+---               header on the query window's rows (title, its first line as a
+---               field with the caret at its cursor in Insert mode, status);
+---               the preview window's cells with title on the row above; keys
+---               as the hint row. Keys stay the buffers' maps.
+---   opts.on_scroll fn(rows), opts.on_rows fn(rows): in a frame, the wheel,
+---               and how many items fit (a plugin that pages)
 ---   opts.keys   { { 'j/k', 'move' }, { '<CR>', 'open' } }: the hint line
---- Answers a handle: :update(items?) to draw again, :close(). Outside DevHub
---- the buffer is just text and the handle does nothing.
+--- Answers a handle: :update(items?) to draw again, :frame{ title?, status?,
+--- preview_title?, placeholder?, preview_win? } (a frame's parts), :redraw()
+--- (the cursor moved without an autocmd), :close(). Outside DevHub the
+--- buffer is just text and the handle does nothing.
 function M.view(opts)
   opts = opts or {}
   if type(opts.items) == 'table' then
@@ -292,6 +287,19 @@ function M.view(opts)
     end
   elseif opts.items ~= nil and type(opts.items) ~= 'function' then
     error('devhub.gui.view: items must be a function or a table', 2)
+  end
+  if opts.frame ~= nil then
+    if type(opts.frame) ~= 'table' or opts.frame.win == nil then
+      error('devhub.gui.view: frame must be { win, query?, preview?, title?, status? }', 2)
+    end
+    for _, key in ipairs({ 'title', 'status' }) do
+      if opts.frame[key] ~= nil then
+        check_component('view (frame.' .. key .. ')', opts.frame[key])
+      end
+    end
+    if type(opts.frame.preview) == 'table' and opts.frame.preview.title ~= nil then
+      check_component('view (frame.preview.title)', opts.frame.preview.title)
+    end
   end
   return deferred(function(c)
     return c.view and c.view(opts)
@@ -326,39 +334,6 @@ function M.inline_clear_all(buf)
   local c = core()
   if c and c.inline_clear_all then
     c.inline_clear_all(buf)
-  end
-end
-
---- Paint a line range over every window showing it (diff windows too):
---- opts: { buf, range = { first, last }, style = 'dim' | 'highlight' | 'tag',
---- tag = 'NEW since viewed'?, hl = group or tone? }. Answers a handle: :clear().
-function M.decorate(opts)
-  opts = opts or {}
-  if opts.style and opts.style ~= 'dim' and opts.style ~= 'highlight' and opts.style ~= 'tag' then
-    error("devhub.gui.decorate: style must be 'dim', 'highlight' or 'tag'", 2)
-  end
-  return deferred(function(c)
-    return c.decorate and c.decorate(opts)
-  end)
-end
-
---- Declare that the virtual text and lines of extmark namespace ns (an id or
---- a name) are content — code, like the deleted lines of an inline diff —
---- so DevHub draws them in the grid's face as the buffer's own lines, not in
---- the proportional face it gives words about the code (diagnostics, hints,
---- notes). on = false undoes it. Outside DevHub nothing changes.
-function M.content_namespace(ns, on)
-  with_core(function(c)
-    if c.content_namespace then
-      c.content_namespace(ns, on)
-    end
-  end)
-end
-
-function M.decorate_clear_all(buf)
-  local c = core()
-  if c and c.decorate_clear_all then
-    c.decorate_clear_all(buf)
   end
 end
 

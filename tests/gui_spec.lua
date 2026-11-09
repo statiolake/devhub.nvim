@@ -8,7 +8,7 @@ local function check(condition, message)
 end
 
 -- What DevHub would inject: records the calls.
-local calls = { view = {}, inline = {}, notify = {}, decorate = {}, cleared = {} }
+local calls = { view = {}, inline = {}, notify = {}, cleared = {} }
 local core = { _chan = 1 }
 function core.view(opts)
   table.insert(calls.view, opts)
@@ -22,10 +22,6 @@ function core.inline(opts)
       table.insert(calls.cleared, opts.id)
     end,
   }
-end
-function core.decorate(opts)
-  table.insert(calls.decorate, opts)
-  return { id = 9, clear = function() end }
 end
 function core.notify(opts)
   table.insert(calls.notify, opts)
@@ -102,11 +98,13 @@ gui.clear_history()
 check(calls.cleared_history, 'clear_history forwarded')
 vim.cmd 'Notifications'
 check(calls.notifications, ':Notifications opens DevHub\'s pager')
-function core.content_namespace(ns, on)
-  calls.content_ns = { ns, on }
-end
-gui.content_namespace(7)
-check(calls.content_ns and calls.content_ns[1] == 7, 'content_namespace forwarded')
+
+-- A framed view: its parts checked, then forwarded.
+calls.view = {}
+local framed = gui.view { buf = 0, win = 2, items = function() end, frame = { win = 1, title = ui.badge 'Files' } }
+check(#calls.view == 1 and calls.view[1].frame.win == 1 and framed.id == 1, 'a framed view forwarded')
+check(not pcall(gui.view, { buf = 0, frame = { win = 1, title = { type = 'nope' } } }), 'a frame\'s bad title is an error')
+check(not pcall(gui.view, { buf = 0, frame = {} }), 'a frame needs its window')
 
 -- LSP floats as popups: hover, signature help, diagnostics.
 calls.popup = {}
