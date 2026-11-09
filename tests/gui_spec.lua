@@ -36,6 +36,9 @@ end
 function core.clear_history()
   calls.cleared_history = true
 end
+function core.notifications()
+  calls.notifications = true
+end
 
 -- 1. Outside DevHub: harmless.
 local gui = require('devhub').gui
@@ -47,6 +50,7 @@ h:update()
 h:close()
 check(gui.override_notify() == false, 'override_notify outside DevHub')
 check(#gui.history() == 0, 'no history outside DevHub')
+check(pcall(gui.notifications), 'notifications outside DevHub: :messages')
 check(gui.popup { component = ui.md 'x' } == nil, 'a popup outside DevHub is nil')
 -- The LSP float hook leaves Neovim's own float outside DevHub.
 gui.hook_floats()
@@ -96,6 +100,8 @@ check(calls.notify[1] and calls.notify[1].msg == 'hello' and calls.notify[1].gro
 check(gui.history()[1].msg == 'kept', 'history forwarded')
 gui.clear_history()
 check(calls.cleared_history, 'clear_history forwarded')
+vim.cmd 'Notifications'
+check(calls.notifications, ':Notifications opens DevHub\'s pager')
 function core.content_namespace(ns, on)
   calls.content_ns = { ns, on }
 end

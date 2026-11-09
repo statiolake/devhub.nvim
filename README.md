@@ -284,7 +284,11 @@ DevHub nothing changes.
 
 `gui.history()` answers the notifications DevHub has shown, oldest first
 (`time`, `group`, `title`, `msg`, `level`; at most 200, LSP work only once
-done); `gui.clear_history()` forgets them.
+done); `gui.clear_history()` forgets them. `:Notifications`
+(`gui.notifications()`) reads them again in DevHub's pager — a buffer in a
+float, newest last: `j`/`k`, `/` and `y` as anywhere, `q` closes, `<Tab>`
+switches to Neovim's `:messages` (`:DevhubNotifications` is the same pager
+without this plugin). Outside DevHub it is `:messages`.
 
 ## Options
 

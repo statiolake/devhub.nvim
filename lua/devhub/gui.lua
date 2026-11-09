@@ -145,6 +145,18 @@ function M.clear_history()
   end
 end
 
+--- Read them again (`:Notifications`): DevHub's pager, a buffer in a float
+--- (j/k, /, y; q closes, <Tab> goes to Neovim's :messages), newest last.
+--- Outside DevHub, or with a DevHub that has no pager: :messages.
+function M.notifications()
+  local c = core()
+  if c and c.notifications then
+    c.notifications()
+    return
+  end
+  vim.cmd 'messages'
+end
+
 local overridden = false
 
 --- vim.notify drawn by DevHub (gui.notify) in DevHub's GUI, with LSP
