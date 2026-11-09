@@ -245,7 +245,6 @@ end
 function M.setup(options)
   M.config = vim.tbl_extend('force', M.config, options or {})
   if M.gui.available() then
-    M.gui.hook_floats_on_lsp()
     if M.config.notify then
       M.gui.override_notify()
     end
@@ -276,9 +275,6 @@ function M._startup()
     return
   end
   vim.g.devhub_loaded = true
-  if vim.env.DEVHUB_NEOVIM_GUI == '1' then
-    M.gui.hook_floats_on_lsp()
-  end
   if not M.inside() then
     return
   end
