@@ -123,7 +123,7 @@ end
   frame; `max_width`/`max_height` are kept. Callers still get a buffer and
   a (hidden) window back, as from Neovim, and the highlights they put on
   its code are drawn (signature help's active parameter, through
-  `ui.md(text, { marks = … })`). Neovim 0.10+; outside DevHub or on
+  `ui.md(text, { marks = … })`). Outside DevHub or on
   any error, Neovim's own float. Set `vim.g.devhub_rich_floats = false` to
   keep Neovim's always.
 - `:DevhubImageDemo [path]` and `:DevhubGuiDemo` come from DevHub. There
@@ -278,7 +278,7 @@ gui.notify { group = 'build', key = 'job:1', msg = 'compiled', done = true }
 
 In DevHub's GUI `vim.notify` becomes DevHub's, drawn as fidget draws: compact
 lines at the bottom right above the status line, under their source
-(`opts.title`), fading. LSP progress (`LspProgress`, 0.10+) shows as a
+(`opts.title`), fading. LSP progress (`LspProgress`) shows as a
 spinner, the work's title and its percentage, ticked when done. Outside
 DevHub nothing changes.
 
@@ -314,4 +314,6 @@ tests/run.sh   # nvim --headless: startup highlights are the theme file's
 tests/fixtures/regenerate.sh <DevHub checkout>  # the fixtures, from DevHub's generator
 ```
 
-Neovim 0.9 or later.
+Neovim 0.12, the one DevHub runs: `NVIM=<DevHub>/apps/desktop/out/nvim/bin/nvim
+tests/run.sh` in a built DevHub checkout (`pnpm --filter @devhub/desktop
+build:nvim`).

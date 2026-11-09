@@ -1,5 +1,6 @@
 #!/bin/sh
-# Run the headless tests: nvim must be on PATH (or $NVIM).
+# Run the headless tests on Neovim 0.12: $NVIM (DevHub's out/nvim/bin/nvim),
+# or the nvim on PATH.
 set -eu
 cd "$(dirname "$0")/.."
 NVIM="${NVIM:-nvim}"

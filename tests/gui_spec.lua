@@ -120,37 +120,35 @@ local function fake_popup(opts)
   return h
 end
 core.popup = fake_popup
-if vim.fn.has 'nvim-0.10' == 1 then
-  local hover = { '```python', '(method) def detect() -> Literal[...]', '```', '', 'Detect the platform.' }
-  local pbuf, pwin = util.open_floating_preview(hover, 'markdown', { focus_id = 'textDocument/hover', max_width = 60 })
-  local first = calls.popup[1]
-  check(first and first.opts.component.type == 'markdown', 'hover is a popup of markdown')
-  check(first and first.opts.component.text:find('def detect', 1, true), 'with the hover text')
-  check(first and first.opts.max_width == 60, 'max sizes kept')
-  check(vim.api.nvim_win_is_valid(pwin) and vim.api.nvim_win_get_config(pwin).hide == true, 'a hidden window answers')
-  check(vim.api.nvim_buf_get_lines(pbuf, 0, 1, false)[1] == '```python', 'its buffer has the lines')
-  -- K K: into the popup, not a second one.
-  local again_buf = util.open_floating_preview(hover, 'markdown', { focus_id = 'textDocument/hover' })
-  check(#calls.popup == 1 and first.focused == 1 and again_buf == pbuf, 'asked again: focused')
-  -- Its caller closing the window closes the popup.
-  vim.api.nvim_win_close(pwin, true)
-  check(not first.open, 'the window closed: the popup closed')
-  -- A diagnostic float: plain text in the colours its caller gives the buffer.
-  local dbuf = util.open_floating_preview({ 'Diagnostics:', '1. undefined name' }, 'plaintext', { focus_id = 'cursor' })
-  vim.api.nvim_buf_add_highlight(dbuf, -1, 'DiagnosticError', 1, 3, 17)
-  local diag = calls.popup[2]
-  check(vim.wait(1000, function() return diag and diag.updates > 0 end), 'the diagnostic popup coloured')
-  local runs = diag and diag.component and diag.component.children[2].runs or {}
-  check(runs[2] and runs[2].hl == 'DiagnosticError' and runs[2].text == 'undefined name', 'a run in the diagnostic colour')
-  check(ui.validate(diag.component), 'the diagnostic component validates')
-  diag.opts.on_close()
-  -- A popup that fails: Neovim's float after all.
-  core.popup = function() error 'boom' end
-  local _, fwin = util.open_floating_preview({ 'x' }, 'markdown', {})
-  check(vim.api.nvim_win_is_valid(fwin) and not vim.api.nvim_win_get_config(fwin).hide, 'an error: Neovim\'s float')
-  vim.api.nvim_win_close(fwin, true)
-  core.popup = fake_popup
-end
+local hover = { '```python', '(method) def detect() -> Literal[...]', '```', '', 'Detect the platform.' }
+local pbuf, pwin = util.open_floating_preview(hover, 'markdown', { focus_id = 'textDocument/hover', max_width = 60 })
+local first = calls.popup[1]
+check(first and first.opts.component.type == 'markdown', 'hover is a popup of markdown')
+check(first and first.opts.component.text:find('def detect', 1, true), 'with the hover text')
+check(first and first.opts.max_width == 60, 'max sizes kept')
+check(vim.api.nvim_win_is_valid(pwin) and vim.api.nvim_win_get_config(pwin).hide == true, 'a hidden window answers')
+check(vim.api.nvim_buf_get_lines(pbuf, 0, 1, false)[1] == '```python', 'its buffer has the lines')
+-- K K: into the popup, not a second one.
+local again_buf = util.open_floating_preview(hover, 'markdown', { focus_id = 'textDocument/hover' })
+check(#calls.popup == 1 and first.focused == 1 and again_buf == pbuf, 'asked again: focused')
+-- Its caller closing the window closes the popup.
+vim.api.nvim_win_close(pwin, true)
+check(not first.open, 'the window closed: the popup closed')
+-- A diagnostic float: plain text in the colours its caller gives the buffer.
+local dbuf = util.open_floating_preview({ 'Diagnostics:', '1. undefined name' }, 'plaintext', { focus_id = 'cursor' })
+vim.api.nvim_buf_set_extmark(dbuf, vim.api.nvim_create_namespace '', 1, 3, { end_col = 17, hl_group = 'DiagnosticError' })
+local diag = calls.popup[2]
+check(vim.wait(1000, function() return diag and diag.updates > 0 end), 'the diagnostic popup coloured')
+local runs = diag and diag.component and diag.component.children[2].runs or {}
+check(runs[2] and runs[2].hl == 'DiagnosticError' and runs[2].text == 'undefined name', 'a run in the diagnostic colour')
+check(ui.validate(diag.component), 'the diagnostic component validates')
+diag.opts.on_close()
+-- A popup that fails: Neovim's float after all.
+core.popup = function() error 'boom' end
+local _, fwin = util.open_floating_preview({ 'x' }, 'markdown', {})
+check(vim.api.nvim_win_is_valid(fwin) and not vim.api.nvim_win_get_config(fwin).hide, 'an error: Neovim\'s float')
+vim.api.nvim_win_close(fwin, true)
+core.popup = fake_popup
 
 if #failures > 0 then
   io.stderr:write('FAIL\n  ' .. table.concat(failures, '\n  ') .. '\n')

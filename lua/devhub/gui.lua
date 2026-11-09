@@ -174,7 +174,7 @@ function M.override_notify()
   return true
 end
 
---- LSP progress ($/progress, Neovim 0.10+) as notifications grouped by the
+--- LSP progress ($/progress) as notifications grouped by the
 --- client's name: a spinner and the percentage while it works, a tick when done.
 function M.lsp_progress()
   if vim.fn.exists '##LspProgress' == 0 then
@@ -432,12 +432,8 @@ end
 -- A byte column of line as a UTF-16 one (what the page counts in).
 local function utf16_col(line, byte)
   byte = math.min(byte, #line)
-  if vim.fn.has 'nvim-0.11' == 1 then
-    local ok, n = pcall(vim.str_utfindex, line, 'utf-16', byte)
-    return ok and n or byte
-  end
-  local ok, _, u16 = pcall(vim.str_utfindex, line, byte)
-  return ok and u16 or byte
+  local ok, n = pcall(vim.str_utfindex, line, 'utf-16', byte)
+  return ok and n or byte
 end
 
 -- The highlights its caller put on the buffer's lines [first, last] (an
@@ -484,10 +480,10 @@ end
 --- open_floating_preview as a DevHub popup: a scratch buffer with the lines
 --- (its caller adds highlights to it) and a hidden float (its caller may
 --- close it; that closes the popup too) are what it answers, as Neovim's
---- does. Nil when it cannot (outside DevHub, before 0.10): Neovim's float.
+--- does. Nil when it cannot (outside DevHub): Neovim's float.
 function M._popup_preview(contents, syntax, opts)
   local c = core()
-  if not c or not c.popup or vim.fn.has 'nvim-0.10' == 0 then
+  if not c or not c.popup then
     return nil
   end
   opts = opts or {}
