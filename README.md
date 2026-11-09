@@ -146,7 +146,7 @@ reserves nothing, the handles do nothing.
 local gui = require('devhub').gui
 local ui = gui.ui
 
-ui.card {                                   -- a raised column; accent = a bar on the left
+ui.card {                                   -- a raised column; accent = a ring in that tone
   accent = 'warn',
   ui.hstack {                               -- a row; gap, pad, align, justify, wrap, indent, bg
     ui.avatar('claude', { tone = 'keyword' }),
