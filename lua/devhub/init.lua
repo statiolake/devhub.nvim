@@ -27,6 +27,9 @@ M.config = {
   follow = true,
   -- In DevHub's GUI, vim.notify drawn by DevHub (fidget-like, with LSP progress).
   notify = false,
+  -- In DevHub's GUI, vim.ui.select and vim.ui.input drawn as DevHub's quick
+  -- pick (DevHub's docs/native-picker.md). Off until it has been tried.
+  quick_pick = false,
   -- Run after the highlights are set, with the theme: for your own tweaks.
   on_apply = nil,
 }
@@ -245,6 +248,9 @@ function M.setup(options)
     M.gui.hook_floats_on_lsp()
     if M.config.notify then
       M.gui.override_notify()
+    end
+    if M.config.quick_pick then
+      M.gui.quick_pick()
     end
   end
   if not M.inside() then

@@ -582,6 +582,51 @@ function M._popup_preview(contents, syntax, opts)
   return buf, win
 end
 
+--- vim.ui.select in DevHub's quick pick: the same contract (on_choice(item,
+--- idx), or nil, nil when cancelled), answered in DevHub's own picker. Outside
+--- DevHub, Neovim's (or whichever plugin's) vim.ui.select as it was.
+function M.select(items, opts, on_choice)
+  local c = core()
+  if c and c.select then
+    return c.select(items, opts, on_choice)
+  end
+  return (M._ui_select or vim.ui.select)(items, opts, on_choice)
+end
+
+--- vim.ui.input in DevHub's quick pick: on_confirm(text), or nil when cancelled.
+function M.input(opts, on_confirm)
+  local c = core()
+  if c and c.input then
+    return c.input(opts, on_confirm)
+  end
+  return (M._ui_input or vim.ui.input)(opts, on_confirm)
+end
+
+--- Make vim.ui.select and vim.ui.input DevHub's quick pick (setup{
+--- quick_pick = true }). Installed again once Neovim has started and at
+--- every attach, so it wins over a plugin that takes them in its own setup
+--- (snacks' ui_select, dressing): in DevHub's GUI a simple choice is DevHub's
+--- question, drawn as every other one is. What it replaced is kept and used
+--- outside DevHub.
+function M.quick_pick()
+  local function install()
+    if vim.ui.select ~= M.select then
+      M._ui_select = vim.ui.select
+      vim.ui.select = M.select
+    end
+    if vim.ui.input ~= M.input then
+      M._ui_input = vim.ui.input
+      vim.ui.input = M.input
+    end
+  end
+  install()
+  local group = vim.api.nvim_create_augroup('devhub_quick_pick', { clear = true })
+  vim.api.nvim_create_autocmd('VimEnter', { group = group, once = true, callback = function()
+    vim.schedule(install)
+  end })
+  vim.api.nvim_create_autocmd('User', { group = group, pattern = 'DevhubGui', callback = install })
+end
+
 local hooked = false
 
 --- hook_floats() at the first LspAttach: vim.lsp stays unloaded until then.

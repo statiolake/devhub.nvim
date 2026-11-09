@@ -156,6 +156,32 @@ check(vim.api.nvim_win_is_valid(fwin) and not vim.api.nvim_win_get_config(fwin).
 vim.api.nvim_win_close(fwin, true)
 core.popup = fake_popup
 
+-- vim.ui.select / input: forwarded to DevHub's quick pick when it is there,
+-- installed over what was there, and that kept for outside DevHub.
+do
+  local asked
+  core.select = function(items, _, on_choice)
+    asked = items
+    on_choice(items[2], 2)
+  end
+  core.input = function(_, on_confirm)
+    on_confirm('typed')
+  end
+  local before = vim.ui.select
+  gui.quick_pick()
+  check(vim.ui.select == gui.select and gui._ui_select == before, 'quick_pick installs vim.ui.select')
+  local got
+  vim.ui.select({ 'a', 'b' }, {}, function(item, idx)
+    got = { item, idx }
+  end)
+  check(asked and got and got[1] == 'b' and got[2] == 2, 'select goes to the quick pick')
+  local text
+  vim.ui.input({}, function(t)
+    text = t
+  end)
+  check(text == 'typed', 'input goes to the quick pick')
+end
+
 if #failures > 0 then
   io.stderr:write('FAIL\n  ' .. table.concat(failures, '\n  ') .. '\n')
   vim.cmd 'cquit 1'

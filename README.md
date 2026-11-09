@@ -290,12 +290,28 @@ float, newest last: `j`/`k`, `/` and `y` as anywhere, `q` closes, `<Tab>`
 switches to Neovim's `:messages` (`:DevhubNotifications` is the same pager
 without this plugin). Outside DevHub it is `:messages`.
 
+### Choices: `quick_pick = true`
+
+```lua
+require('devhub').setup { quick_pick = true }  -- or require('devhub').gui.quick_pick()
+```
+
+In DevHub's GUI `vim.ui.select` and `vim.ui.input` become DevHub's quick
+pick — the control DevHub asks all its own questions with (the command
+palette's): typing filters, the arrows and `<C-n>`/`<C-p>` move, Return
+answers, Escape cancels. The callback runs with the answer (`nil` when
+cancelled); Neovim does not wait meanwhile. It wins over a plugin that
+takes `vim.ui.select` in its own setup (snacks' `ui_select`, dressing), and
+what it replaced is used outside DevHub. `gui.select`/`gui.input` are the
+same calls without replacing anything. See DevHub's `docs/native-picker.md`.
+
 ## Options
 
 ```lua
 require('devhub').setup {
   auto = true,     -- wear the theme at startup when no colorscheme is chosen
   notify = false,  -- vim.notify drawn by DevHub (in its GUI), with LSP progress
+  quick_pick = false, -- vim.ui.select / vim.ui.input as DevHub's quick pick (in its GUI)
   follow = true,   -- follow User DevhubTheme and changes to the file
   on_apply = function(theme) end, -- your tweaks, after every apply: theme.colors
                                   -- (background, foreground, ansi[1..16], …), theme.neovim
