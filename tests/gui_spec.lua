@@ -48,6 +48,10 @@ check(gui.override_notify() == false, 'override_notify outside DevHub')
 check(#gui.history() == 0, 'no history outside DevHub')
 check(pcall(gui.notifications), 'notifications outside DevHub: :messages')
 check(gui.popup { component = ui.md 'x' } == nil, 'a popup outside DevHub is nil')
+check(gui.statusline(function() end) == false, 'statusline outside DevHub: nothing')
+check(not gui.has_statusline(), 'no footers outside DevHub')
+check(not pcall(gui.statusline, 42), 'statusline takes a function, a choice or nil')
+check(not pcall(gui.statusline, nil, { events = 'BufAdd' }), 'statusline events are a list')
 -- The LSP float hook leaves Neovim's own float outside DevHub.
 gui.hook_floats()
 local util = vim.lsp.util
@@ -98,6 +102,31 @@ gui.clear_history()
 check(calls.cleared_history, 'clear_history forwarded')
 vim.cmd 'Notifications'
 check(calls.notifications, ':Notifications opens DevHub\'s pager')
+
+-- Footers: forwarded to a DevHub that has them; a DevHub from before them
+-- (no core.statusline) leaves Neovim's cells.
+check(gui.statusline(function() end) == false and not gui.has_statusline(), 'an older DevHub: no footers')
+local footer_calls = {}
+function core.statusline(fn, opts)
+  table.insert(footer_calls, { fn = fn, opts = opts })
+end
+function core.statusline_refresh()
+  calls.refreshed = true
+end
+local stl = function(_, ctx)
+  return ui.hstack { align = 'center', ui.line { grow = true }, ui.hstack { bg = 'Pmenu', pad = { 0, 6 }, round = true, ui.text 'a.ts' } }
+end
+check(gui.statusline(stl, { events = { 'BufAdd' } }) == true and gui.has_statusline(), 'statusline handed to DevHub')
+check(footer_calls[1] and footer_calls[1].fn == stl and footer_calls[1].opts.events[1] == 'BufAdd', 'statusline forwarded')
+check(gui.statusline 'default' and footer_calls[2].fn == 'default', "statusline('default') forwarded")
+gui.statusline_refresh()
+check(calls.refreshed, 'statusline_refresh forwarded')
+local tree = stl(1, {})
+check(ui.validate(tree), 'a footer tree validates')
+check(tree.children[1].type == 'line' and tree.children[2].round == true, 'line and a round chip')
+check(ui.position({ format = 'Ln %l' }).slot == 'position' and ui.mode().slot == 'mode' and ui.showcmd().slot == 'showcmd', 'slots')
+check(not ui.validate { type = 'slot', slot = 'clock' }, 'an unknown slot is wrong')
+check(not pcall(ui.hstack, { round = 'yes' }), 'round is a boolean')
 
 -- A framed view: its parts checked, then forwarded.
 calls.view = {}

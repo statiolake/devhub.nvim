@@ -148,7 +148,7 @@ local ui = gui.ui
 
 ui.card {                                   -- a raised column; accent = a ring in that tone
   accent = 'warn',
-  ui.hstack {                               -- a row; gap, pad, align, justify, wrap, indent, bg
+  ui.hstack {                               -- a row; gap, pad, align, justify, wrap, indent, bg, round
     ui.avatar('claude', { tone = 'keyword' }),
     ui.text { { 'claude', bold = true }, ' replied ', { '3 min ago', dim = true } }, -- runs
     ui.badge('agent', { tone = 'keyword' }), ui.pill(2, { tone = 'warn' }),
@@ -169,7 +169,8 @@ ui.card {                                   -- a raised column; accent = a ring 
 ```
 
 Text takes `size = 'xs' | 'sm' | 'md' | 'lg'`, `mono`, `bold`, `dim`, `wrap`
-(else one line with an ellipsis) and `hl`/`tone`; runs take `hl`/`tone`,
+(else one line with an ellipsis), `ink` (only the group's colour, not its
+weight or slant) and `hl`/`tone`; runs take `hl`/`tone`,
 `mono`, `bold`, `italic`, `dim`, `strike`, `underline`. Tones: `info`, `warn`,
 `error`, `ok`, `hint`, `muted`, `accent`, `special`, `keyword`, `string`,
 `title`, `added`, `changed`, `removed`. Every node takes `on_click`, `grow`
@@ -296,6 +297,50 @@ as wide and tall as its content up to its maximum and the room there, and
 scrolls inside past that (the wheel too). Neovim keeps the keys: focused,
 the keys above are buffer-local maps on the anchor's buffer, and what they
 replaced comes back when it closes. Outside DevHub `gui.popup` answers `nil`.
+
+### `gui.statusline`: each window's footer
+
+DevHub does not draw Neovim's status line cells: it draws each window's
+footer in the row Neovim keeps for it (`laststatus` is yours; nothing
+moves). Register a function and its tree is that footer:
+
+```lua
+gui.statusline(function(win, ctx)
+  -- ctx = { current, laststatus, width, local_statusline, default = fn() -> tree }
+  if ctx.local_statusline then return nil end   -- quickfix, a window picker's hints: Neovim's cells
+  local buf = vim.api.nvim_win_get_buf(win)
+  return ui.hstack { align = 'center', gap = 4,
+    ui.line { grow = true, hl = ctx.current and 'StatusLine' or 'StatusLineNC' }, -- a line through the row
+    ui.hstack { bg = 'Pmenu', pad = { 0, 6 }, round = true,                       -- a chip
+      ui.text(vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ':t')),
+      vim.bo[buf].modified and ui.text('●') or nil },
+    ctx.current and ui.position { format = 'Ln %l, Col %c' } or nil }
+end, { events = { 'BufAdd' } })
+```
+
+- `fn` answers a tree, `nil` (DevHub's rules: a window's own `statusline`
+  is Neovim's cells; Neovim's default `statusline` is DevHub's default
+  footer — path, name, `●`, lock; diagnostics, `Ln, Col`, filetype and
+  branch for the current window; a global `statusline` of yours is cells),
+  or `false` (an empty footer). `ctx.default()` is DevHub's default footer,
+  to use a part of it.
+- It runs on buffer, window, modified, diagnostic, option and colorscheme
+  changes (and `events`), at most once per turn of the event loop, and a
+  tree is sent only when it changed — never per key. What changes at every
+  key is a slot DevHub fills from Neovim's redraw: `ui.position{ format }`
+  (`%l` line, `%c` column, `%L` lines, `%p` percent), `ui.mode{}`,
+  `ui.showcmd{}`.
+- `ui.line{}` is drawn at the height of the window boundaries' lines, so a
+  boundary ending beside it meets it. A node with `on_click` runs it on a
+  click; any other press is Neovim's (a drag of the row resizes).
+- `gui.statusline('default')` draws DevHub's default footer even with a
+  global `statusline` of yours (as `vim.g.devhub_statusline = 'default'`);
+  `gui.statusline('cells')` Neovim's cells everywhere; `gui.statusline(nil)`
+  lets go; `gui.statusline_refresh()` makes the footers again.
+- Outside DevHub it does nothing: `'statusline'` is what Neovim draws, so
+  keep yours for a terminal. A DevHub from before footers draws your
+  `statusline` as cells; a config shared with an older devhub.nvim (an SSH
+  host) guards with `if gui.statusline then … end`.
 
 ### Notifications: `notify = true`
 

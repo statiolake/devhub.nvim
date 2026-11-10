@@ -361,6 +361,83 @@ function M.popup(opts)
   return c and c.popup and c.popup(opts) or nil
 end
 
+-- Status lines. --------------------------------------------------------------
+
+local statusline_choice
+
+--- Each window's footer, drawn by DevHub in the status line row Neovim keeps
+--- for it (DevHub does not draw Neovim's status line cells). fn(win, ctx)
+--- answers a gui.ui tree for win's row, nil to leave it to DevHub's rules
+--- (a window-local 'statusline' — quickfix's, a window picker's hints — is
+--- Neovim's cells; Neovim's default statusline is DevHub's default footer;
+--- a global one of yours or a plugin's is cells), or false for an empty
+--- footer.
+---   ctx = { current = bool, laststatus = n, width = cells,
+---           local_statusline = string | nil, default = fn() -> tree }
+---   opts.events  autocmds that make it again, beyond DevHub's (buffer,
+---                window, modified, diagnostic, option and colorscheme
+---                changes); never per key: use ui.position{}, ui.mode{},
+---                ui.showcmd{} for what changes at every key.
+--- gui.statusline('default') draws DevHub's default footer even with a
+--- global 'statusline'; gui.statusline('cells') Neovim's cells everywhere;
+--- gui.statusline(nil) lets go. Outside DevHub it does nothing ('statusline'
+--- is what Neovim draws), and so does a DevHub from before footers (Neovim's
+--- cells, as it drew them). Answers whether DevHub's GUI was handed it.
+function M.statusline(fn, opts)
+  if fn ~= nil and type(fn) ~= 'function' and fn ~= 'default' and fn ~= 'cells' then
+    error("devhub.gui.statusline: fn must be a function, 'default', 'cells' or nil", 2)
+  end
+  if opts ~= nil and (type(opts) ~= 'table' or (opts.events ~= nil and type(opts.events) ~= 'table')) then
+    error('devhub.gui.statusline: opts must be { events = { ... } }', 2)
+  end
+  statusline_choice = { fn = fn, opts = opts }
+  local function apply(c)
+    if c.statusline then
+      c.statusline(fn, opts)
+      return true
+    end
+    return false
+  end
+  local c = core()
+  if c then
+    return apply(c)
+  end
+  if vim.env.DEVHUB_NEOVIM_GUI == '1' then
+    -- Made again at every attach (a DevHub restart, an SSH reconnect): the
+    -- injected module starts with none.
+    vim.api.nvim_create_autocmd('User', {
+      pattern = 'DevhubGui',
+      group = vim.api.nvim_create_augroup('devhub_gui_statusline_facade', { clear = true }),
+      callback = function()
+        local now = core()
+        if now and statusline_choice then
+          now.statusline(statusline_choice.fn, statusline_choice.opts)
+        end
+      end,
+    })
+    return true
+  end
+  return false
+end
+
+--- Make the footers again now (your plugin's state changed).
+function M.statusline_refresh()
+  local c = core()
+  if c and c.statusline_refresh then
+    c.statusline_refresh()
+  end
+end
+
+--- Whether this DevHub draws footers from gui.statusline (false outside
+--- DevHub, and in a DevHub before them).
+function M.has_statusline()
+  local c = core()
+  if c then
+    return c.statusline ~= nil
+  end
+  return vim.env.DEVHUB_NEOVIM_GUI == '1'
+end
+
 -- LSP floats as popups. ------------------------------------------------------
 
 -- The open previews, by focus_id: { handle, buf, win, source }.

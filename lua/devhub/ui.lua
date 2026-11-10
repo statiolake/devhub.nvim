@@ -26,7 +26,7 @@ M.tones = {
 local TYPES = {
   stack = true, hstack = true, text = true, markdown = true, badge = true, kbd = true, button = true,
   checkbox = true, progress = true, icon = true, avatar = true, spacer = true, divider = true,
-  sparkline = true, chart = true, image = true,
+  sparkline = true, chart = true, image = true, line = true, slot = true,
 }
 
 local function fail(where, message)
@@ -67,7 +67,7 @@ end
 
 local CONTAINER = {
   gap = 'number', pad = nil, align = 'string', justify = 'string', wrap = 'boolean', card = 'boolean',
-  accent = 'string', bg = 'string', indent = 'number',
+  accent = 'string', bg = 'string', indent = 'number', round = 'boolean',
 }
 
 local function container(kind)
@@ -118,11 +118,12 @@ local RUN = { hl = 'string', tone = 'string', mono = 'boolean', bold = 'boolean'
   dim = 'boolean', strike = 'boolean', underline = 'boolean' }
 
 --- Text: ui.text('plain', opts), or runs: ui.text{ 'a ', { 'b', hl = 'Comment', mono = true }, size = 'sm' }.
---- opts: size = 'xs' | 'sm' | 'md' | 'lg', mono, bold, dim, wrap, upper, hl | tone.
+--- opts: size = 'xs' | 'sm' | 'md' | 'lg', mono, bold, dim, wrap, upper, hl | tone,
+--- ink (only hl's colour, not its weight or slant).
 function M.text(value, opts)
   local where = 'text'
   local fields = { size = 'string', mono = 'boolean', bold = 'boolean', dim = 'boolean', wrap = 'boolean',
-    upper = 'boolean' }
+    upper = 'boolean', ink = 'boolean' }
   if type(value) == 'string' or type(value) == 'number' then
     return with(where, { type = 'text', text = tostring(value) }, opts, fields)
   end
@@ -277,6 +278,29 @@ function M.image(src, opts)
   return with('image', { type = 'image', src = src }, opts, { width = 'number', height = 'number' })
 end
 
+--- A line through the middle of the row (a footer's `─`), in its group's
+--- foreground: ui.line{ grow = true, hl = 'StatusLine' }. In a footer it is
+--- at the height of the window boundaries' lines, so one ending beside it
+--- meets it.
+function M.line(opts)
+  return with('line', { type = 'line' }, opts)
+end
+
+local function slot(kind, fields)
+  return function(opts)
+    return with(kind, { type = 'slot', slot = kind }, opts, fields)
+  end
+end
+
+--- Values DevHub fills from Neovim's own redraw at every key, so no Lua
+--- runs for them (in a gui.statusline footer, of its window):
+--- ui.position{ format = 'Ln %l, Col %c' } — the cursor (%l line, %c
+--- column, %L lines, %p percent); ui.mode{} — the mode (NORMAL, INSERT,
+--- …); ui.showcmd{} — the pending command.
+M.position = slot('position', { format = 'string', ink = 'boolean' })
+M.mode = slot('mode', { ink = 'boolean' })
+M.showcmd = slot('showcmd', { ink = 'boolean' })
+
 --- Check a tree made by hand: answers true, or false and what is wrong where.
 function M.validate(node, path)
   path = path or 'root'
@@ -298,6 +322,9 @@ function M.validate(node, path)
   }
   if need[node.type] and type(node[need[node.type]]) ~= 'string' then
     return false, path .. ': ' .. node.type .. ' needs a string ' .. need[node.type]
+  end
+  if node.type == 'slot' and node.slot ~= 'position' and node.slot ~= 'mode' and node.slot ~= 'showcmd' then
+    return false, path .. ': slot must be position, mode or showcmd'
   end
   if node.type == 'progress' and type(node.value) ~= 'number' then
     return false, path .. ': progress needs a number value'
