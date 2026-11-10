@@ -204,6 +204,13 @@ view:update()                             -- draw again (state the items read ch
 view:close()
 ```
 
+Write keys as Vim writes them (`<C-v>`, `<CR>`, `<S-Tab>`, `j/k`): DevHub
+shows every key — a hint row's, a `ui.kbd`'s, a button's `key` — in its one
+notation, a Mac's, the same as its own hints and tmux's: `⌃V`, `↩`, `⇧⇥`,
+`⎋`, a modified letter a capital, a letter alone as it is typed (`j` and
+`J` stay apart). Keys already written that way, and words that are not keys
+(`:write`), are shown as they are.
+
 #### A framed view: a picker
 
 Given a `frame`, a view is drawn in a frame over a float instead of over
@@ -229,7 +236,7 @@ local list = gui.view {
   buf = list_buf, win = list_win,                           -- list_win: hidden
   items = function(lnum, line) return ui.text(line) end,
   on_click = function(lnum, clicks) end, on_scroll = function(rows) end, on_rows = function(rows) end,
-  keys = { { '↩', 'open' }, { 'esc', 'close' } },
+  keys = { { '<CR>', 'open' }, { '<Esc>', 'close' } },
   frame = {
     win = frame_win,                                        -- the float the frame covers
     query = { win = query_win, placeholder = 'Search' },

@@ -185,7 +185,7 @@ function M.pill(n, opts)
   return node
 end
 
---- A key cap: ui.kbd('r').
+--- A key cap: ui.kbd('r'), ui.kbd('<C-v>') (shown as a Mac writes it: ⌃V).
 function M.kbd(text)
   check('kbd', text, 'string', 'the key', false)
   return { type = 'kbd', text = text }

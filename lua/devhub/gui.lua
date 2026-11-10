@@ -274,7 +274,8 @@ end
 ---               as the hint row. Keys stay the buffers' maps.
 ---   opts.on_scroll fn(rows), opts.on_rows fn(rows): in a frame, the wheel,
 ---               and how many items fit (a plugin that pages)
----   opts.keys   { { 'j/k', 'move' }, { '<CR>', 'open' } }: the hint line
+---   opts.keys   { { 'j/k', 'move' }, { '<CR>', 'open' } }: the hint line,
+---               keys as Vim writes them (DevHub shows them as a Mac does: ↩, ⌃V)
 --- Answers a handle: :update(items?) to draw again, :frame{ title?, status?,
 --- preview_title?, placeholder?, preview_win? } (a frame's parts), :redraw()
 --- (the cursor moved without an autocmd), :close(). Outside DevHub the
