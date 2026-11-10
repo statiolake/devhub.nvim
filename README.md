@@ -66,8 +66,8 @@ colorscheme your config chose itself is never painted over; one DevHub put on
 
 Without a colorscheme of the theme's own: exactly DevHub's table (`neovim` in `theme.json`), applied as a colorscheme
 file applies itself: `highlight clear`, `background`, every group in
-`neovim.highlights` (the editor, syntax, Tree-sitter, LSP, diagnostics, diffs,
-and gitsigns / blink.cmp / snacks / fidget / nvim-tree), and
+`neovim.highlights` (the editor, syntax, Tree-sitter, LSP, diagnostics and
+diffs: Neovim's groups, no plugin's), and
 `g:terminal_color_0` … `15` from `neovim.terminal`; then `g:colors_name` is
 `devhub` and the `ColorScheme` event fires, so your `ColorScheme`
 autocommands adjust it as they would any other.
