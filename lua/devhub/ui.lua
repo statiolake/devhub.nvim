@@ -43,7 +43,10 @@ local function check(where, value, kind, name, optional)
 end
 
 -- The options every node takes, copied from opts into node.
-local COMMON = { on_click = 'function', grow = 'boolean', tip = 'string', hl = 'string', tone = 'string' }
+-- anchor = true: in a popup, the node lined up with the anchor's column.
+local COMMON = {
+  on_click = 'function', grow = 'boolean', tip = 'string', hl = 'string', tone = 'string', anchor = 'boolean',
+}
 
 local function with(where, node, opts, fields)
   opts = opts or {}
@@ -68,6 +71,10 @@ end
 local CONTAINER = {
   gap = 'number', pad = nil, align = 'string', justify = 'string', wrap = 'boolean', card = 'boolean',
   accent = 'string', bg = 'string', indent = 'number', round = 'boolean',
+  -- a list: the selected child (1-based) with one band behind it, in band's ground
+  selected = 'number', band = 'string',
+  -- a pane: scrolls inside past max_height (pixels); popup:scroll(by, pane)
+  pane = 'string', max_height = 'number',
 }
 
 local function container(kind)
@@ -100,6 +107,11 @@ local function container(kind)
 end
 
 --- A column of components: ui.stack{ gap = 4, a, b, c }.
+--- A list: ui.stack{ selected = 2, band = 'PmenuSel', row1, row2 } — one band
+--- behind the selected row, gliding to the next (a popup's :select(n) moves
+--- it without sending the tree). A pane: ui.stack{ pane = 'doc',
+--- max_height = 240, … } scrolls inside past max_height pixels, by the wheel
+--- or by its popup's :scroll(by, 'doc').
 M.stack = container 'stack'
 --- A row of components: ui.hstack{ gap = 6, align = 'center', a, b }.
 M.hstack = container 'hstack'
@@ -170,13 +182,14 @@ function M.md(text, opts)
 end
 M.markdown = M.md
 
---- A badge: ui.badge('agent', { tone = 'keyword' }); pill = true for a count.
+--- A badge: ui.badge('agent', { tone = 'keyword' }); pill = true for a count;
+--- size = 'sm' | 'xs' for a small one in a dense row (a list's kind).
 function M.badge(text, opts)
   if type(text) == 'number' then
     text = tostring(text)
   end
   check('badge', text, 'string', 'the text', false)
-  return with('badge', { type = 'badge', text = text }, opts, { pill = 'boolean', mono = 'boolean' })
+  return with('badge', { type = 'badge', text = text }, opts, { pill = 'boolean', mono = 'boolean', size = 'string' })
 end
 
 --- A count in a pill: ui.pill(2, { tone = 'warn' }).

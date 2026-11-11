@@ -345,14 +345,20 @@ end
 ---                   it flips when the other side has the room
 ---   opts.component  a gui.ui tree (ui.md for markdown and code)
 ---   opts.max_width, opts.max_height  in cells
+---   opts.min_width  in cells: never narrower (a part that comes and goes)
 ---   opts.close_on   events that close it while it is not focused
 ---                   (default CursorMoved, CursorMovedI, InsertCharPre, BufLeave)
 ---   opts.keys       { [lhs] = fn(handle) }: extra keys while it is focused
 ---   opts.text       what y yanks (default: the content's text)
 ---   opts.on_close   fn(handle)
---- Answers a handle — :update(component), :focus() (j/k, <C-d>/<C-u>, gg/G
---- scroll it, q/<Esc> close it, y yanks, until the cursor moves),
---- :scroll(n | 'half' | '-half' | 'page' | '-page' | 'top' | 'bottom'),
+--- A node with anchor = true (the first) is lined up with the anchor's
+--- column: the popup moves sideways so that it starts there.
+--- Answers a handle — :update(component), :select(n) (the list's —
+--- ui.stack{ selected, band } — selection moved, by its index alone; 0: none),
+--- :pane(name, children) (a ui.stack{ pane = name }'s content replaced, alone),
+--- :focus() (j/k, <C-d>/<C-u>, gg/G scroll it, q/<Esc> close it, y yanks,
+--- until the cursor moves), :scroll(n | 'half' | '-half' | 'page' | '-page' |
+--- 'top' | 'bottom', pane?) (a ui.stack{ pane = name } inside, or the popup),
 --- :close(), :is_open() — or nil outside DevHub.
 function M.popup(opts)
   opts = opts or {}

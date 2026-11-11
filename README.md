@@ -292,6 +292,39 @@ pop:focus()                               -- j/k, <C-d>/<C-u>, gg/G scroll; q/<E
 pop:scroll('half'); pop:update(ui.md 'new'); pop:close(); pop:is_open()
 ```
 
+A popup may hold a **list** whose selection your Lua moves and a **pane**
+that scrolls on its own — a menu at the cursor with its documentation under
+it:
+
+```lua
+local menu = gui.popup {
+  anchor = { buf, lnum, col }, close_on = {},
+  min_width = 36,                         -- cells: it does not narrow when the pane goes
+  component = ui.stack {
+    ui.stack {                            -- a list: one band behind the selected row
+      selected = 1, band = 'PmenuSel',
+      ui.hstack { ui.badge('f', { size = 'sm', hl = 'Function' }),
+                  ui.text('useState', { mono = true, anchor = true }) }, -- anchor: under the anchor's column
+      ui.hstack { ui.badge('v', { size = 'sm' }), ui.text('user', { mono = true }) },
+    },
+    ui.stack { pane = 'doc', max_height = 240, ui.md(doc) },   -- pixels; scrolls inside past that
+  },
+}
+menu:select(2)                            -- the band glides there; only the index is sent
+menu:pane('doc', ui.md(other))            -- the pane's content alone, not the tree
+menu:scroll(4, 'doc')                     -- the pane, not the popup ('half', 'page', 'top', … too)
+menu:update(tree)                         -- for a tree that changed
+```
+
+The band moves by transform only, placed at once when it appears. A pane
+starts at its top again when its content changes, has a hairline at its top
+edge, is not there while empty, and gives up its height first when the
+popup has no room for all of it. The first node with
+`anchor = true` starts at the anchor's column: the popup moves left by as
+much as that node is from its edge, so the words of a list line up with the
+word being typed. `ui.badge(text, { size = 'sm' })` (or `'xs'`) is a badge
+for a dense row.
+
 No Neovim window: DevHub draws it at the position (it follows scrolling),
 as wide and tall as its content up to its maximum and the room there, and
 scrolls inside past that (the wheel too). Neovim keeps the keys: focused,

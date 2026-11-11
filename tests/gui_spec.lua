@@ -87,6 +87,22 @@ check(not pcall(gui.inline, { buf = 0, lnum = 1, component = { type = 'nope' } }
 local runs = ui.text({ 'a ', { 'b', tone = 'muted', mono = true } }, { size = 'sm' })
 check(runs.runs[2].hl == 'muted' and runs.runs[2].mono and runs.size == 'sm', 'text runs')
 
+-- A list, a pane, a small badge, an anchored node.
+local list = ui.stack {
+  selected = 2, band = 'PmenuSel',
+  ui.hstack { ui.badge('f', { size = 'sm', hl = 'Function' }), ui.text('useState', { anchor = true, mono = true }) },
+  ui.hstack { ui.badge('v', { size = 'sm' }), ui.text 'user' },
+}
+check(list.selected == 2 and list.band == 'PmenuSel' and #list.children == 2, 'a list: selected and band')
+check(list.children[1].children[1].size == 'sm', 'a small badge')
+check(list.children[1].children[2].anchor == true, 'an anchored node')
+local pane = ui.stack { pane = 'doc', max_height = 240, ui.md 'doc' }
+check(pane.pane == 'doc' and pane.max_height == 240, 'a pane')
+check(ui.validate(ui.stack { list, pane }), 'a list and a pane validate')
+check(not pcall(ui.stack, { selected = 'two' }), 'selected is a number')
+check(not pcall(ui.stack, { pane = 1 }), 'a pane is named')
+check(not pcall(ui.text, 'x', { anchor = 'yes' }), 'anchor is a boolean')
+
 -- 3. In DevHub: forwarded to the core.
 vim.g.devhub_gui = true
 package.loaded['devhub_gui'] = core
@@ -153,6 +169,10 @@ local function fake_popup(opts)
   return h
 end
 core.popup = fake_popup
+local lp = gui.popup { component = ui.stack { list, pane }, min_width = 36, close_on = {} }
+check(lp and calls.popup[1].opts.min_width == 36, 'min_width forwarded')
+check(calls.popup[1].opts.component.children[1].band == 'PmenuSel', 'the list forwarded')
+calls.popup = {}
 local hover = { '```python', '(method) def detect() -> Literal[...]', '```', '', 'Detect the platform.' }
 local pbuf, pwin = util.open_floating_preview(hover, 'markdown', { focus_id = 'textDocument/hover', max_width = 60 })
 local first = calls.popup[1]
