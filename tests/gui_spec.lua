@@ -50,6 +50,7 @@ check(pcall(gui.notifications), 'notifications outside DevHub: :messages')
 check(gui.popup { component = ui.md 'x' } == nil, 'a popup outside DevHub is nil')
 check(gui.statusline(function() end) == false, 'statusline outside DevHub: nothing')
 check(not gui.has_statusline(), 'no footers outside DevHub')
+check(not gui.has_cmdline_popup(), 'no command-line popups outside DevHub')
 check(not pcall(gui.statusline, 42), 'statusline takes a function, a choice or nil')
 check(not pcall(gui.statusline, nil, { events = 'BufAdd' }), 'statusline events are a list')
 -- The LSP float hook leaves Neovim's own float outside DevHub.
@@ -172,6 +173,11 @@ core.popup = fake_popup
 local lp = gui.popup { component = ui.stack { list, pane }, min_width = 36, close_on = {} }
 check(lp and calls.popup[1].opts.min_width == 36, 'min_width forwarded')
 check(calls.popup[1].opts.component.children[1].band == 'PmenuSel', 'the list forwarded')
+check(not gui.has_cmdline_popup(), 'a DevHub before command-line popups')
+core.popup_cmdline = true
+check(gui.has_cmdline_popup(), 'a DevHub that puts popups on its command line')
+local cp = gui.popup { anchor = { cmdline = 3 }, component = ui.text 'x' }
+check(cp and calls.popup[#calls.popup].opts.anchor.cmdline == 3, 'the command-line anchor forwarded')
 calls.popup = {}
 local hover = { '```python', '(method) def detect() -> Literal[...]', '```', '', 'Detect the platform.' }
 local pbuf, pwin = util.open_floating_preview(hover, 'markdown', { focus_id = 'textDocument/hover', max_width = 60 })

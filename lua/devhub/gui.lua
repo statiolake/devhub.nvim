@@ -340,14 +340,20 @@ end
 
 --- A popup DevHub draws at a buffer position (a hover), with no Neovim
 --- window: Neovim keeps the content and the keys.
----   opts.anchor     'cursor' (default) or { buf, lnum, col } (1-based lnum, 0-based col)
+---   opts.anchor     'cursor' (default) or { buf, lnum, col } (1-based lnum, 0-based col),
+---                   or 'cmdline' / { cmdline = col } (a 0-based byte of getcmdline()):
+---                   on DevHub's command-line box — above it ('below': under it), never
+---                   over it, the anchored node over that byte; it follows the box,
+---                   closes with the command line, takes no keys, and is nil while
+---                   no command line is being typed
 ---   opts.placement  'below' (default) | 'above' | 'auto': the side it prefers;
 ---                   it flips when the other side has the room
 ---   opts.component  a gui.ui tree (ui.md for markdown and code)
 ---   opts.max_width, opts.max_height  in cells
 ---   opts.min_width  in cells: never narrower (a part that comes and goes)
 ---   opts.close_on   events that close it while it is not focused
----                   (default CursorMoved, CursorMovedI, InsertCharPre, BufLeave)
+---                   (default CursorMoved, CursorMovedI, InsertCharPre, BufLeave;
+---                   on the command line none)
 ---   opts.keys       { [lhs] = fn(handle) }: extra keys while it is focused
 ---   opts.text       what y yanks (default: the content's text)
 ---   opts.on_close   fn(handle)
@@ -432,6 +438,13 @@ function M.statusline_refresh()
   if c and c.statusline_refresh then
     c.statusline_refresh()
   end
+end
+
+--- Whether this DevHub puts a gui.popup on its command line (anchor =
+--- 'cmdline'): false outside DevHub's GUI, and in a DevHub before it.
+function M.has_cmdline_popup()
+  local c = core()
+  return c ~= nil and c.popup_cmdline == true
 end
 
 --- Whether this DevHub draws footers from gui.statusline (false outside

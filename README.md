@@ -331,6 +331,27 @@ scrolls inside past that (the wheel too). Neovim keeps the keys: focused,
 the keys above are buffer-local maps on the anchor's buffer, and what they
 replaced comes back when it closes. Outside DevHub `gui.popup` answers `nil`.
 
+A popup may stand on DevHub's **command line** instead — a menu for what is
+being typed after `:`:
+
+```lua
+local wild = gui.popup {
+  anchor = { cmdline = start },           -- a 0-based byte of getcmdline(); or 'cmdline' (its start)
+  close_on = {},                          -- the default here: it closes with the command line
+  component = menu_tree,                  -- the same list and pane as above
+}
+```
+
+DevHub draws the command line in its own box, so the popup goes above that
+box (`placement = 'below'`: under it), on the other side when only that one
+has the room, and never over it; its `anchor = true` node is over the cell
+of that byte in the box's text. It follows the box as it moves or grows,
+and closes when the command line does (`CmdlineLeave`). It takes no keys
+(`:focus()` does nothing: the command line has them). With no command line
+being typed `gui.popup` answers `nil`; `gui.has_cmdline_popup()` says
+whether this DevHub takes `anchor = 'cmdline'` at all (an older one does
+not: draw your own there).
+
 ### `gui.statusline`: each window's footer
 
 DevHub does not draw Neovim's status line cells: it draws each window's
