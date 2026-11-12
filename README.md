@@ -205,6 +205,32 @@ view:update()                             -- draw again (state the items read ch
 view:close()
 ```
 
+`on_click(lnum, clicks)` gets 2 for a double click. In Visual mode the
+lines selected are drawn selected, so keys that work on a range read as
+they do in the cells.
+
+#### A tree
+
+Given `indent` (pixels per level), a view is a tree: an item
+`{ node = …, depth = n }` is indented by its depth and DevHub draws the
+guides down the rows (the focused row's level stronger); `sticky = true`
+keeps an item at the top while the rows scroll under it (a root's name).
+`row_height` makes every item at least that tall, its content centred. Your
+plugin keeps the tree — which nodes are open, what each line is — and its
+keys; DevHub knows only the depths.
+[nvim-tree-ui.devhub](https://github.com/statiolake/nvim-tree-ui.devhub)
+draws nvim-tree this way.
+
+```lua
+gui.view {
+  buf = tree_buf, indent = 16, row_height = 22,
+  items = function(lnum, line)
+    if lnum == 1 then return { node = ui.text(line, { bold = true }), sticky = true } end
+    return { node = ui.hstack { ui.icon(0xea7b), ui.text(vim.trim(line)) }, depth = depth_of(lnum) }
+  end,
+}
+```
+
 Write keys as Vim writes them (`<C-v>`, `<CR>`, `<S-Tab>`, `j/k`): DevHub
 shows every key — a hint row's, a `ui.kbd`'s, a button's `key` — in its one
 notation, a Mac's, the same as its own hints and tmux's: `⌃V`, `↩`, `⇧⇥`,

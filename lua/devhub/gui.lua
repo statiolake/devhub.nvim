@@ -259,7 +259,10 @@ end
 ---   opts.win    a window, or 'vsplit' | 'split' | 'float' | 'current' to open one
 ---   opts.items  fn(lnum, line) -> component | nil, or { [lnum] = component }
 ---               (nil: the line's own text, plainly; { node, heading }: a
----               heading above the item, which is not an item)
+---               heading above the item, which is not an item; in a tree,
+---               { node, depth, sticky? })
+---   opts.indent      pixels per level: a tree (items carry their depth)
+---   opts.row_height  each item's least height, in pixels
 ---   opts.on_click fn(lnum, clicks): a click on an item (after the cursor
 ---               moved there; in a frame the keys stay in its query)
 ---   opts.frame  { win, query = { win, placeholder? }, preview = { win, title? },
@@ -284,7 +287,17 @@ function M.view(opts)
   opts = opts or {}
   if type(opts.items) == 'table' then
     for lnum, node in pairs(opts.items) do
-      check_component('view (item ' .. tostring(lnum) .. ')', node)
+      local where = 'view (item ' .. tostring(lnum) .. ')'
+      if type(node) == 'table' and node.type == nil and (node.node ~= nil or node.heading ~= nil or node.depth ~= nil) then
+        -- { node, heading?, depth?, sticky? }: an item, not a component
+        for _, part in ipairs({ 'node', 'heading' }) do
+          if node[part] ~= nil then
+            check_component(where, node[part])
+          end
+        end
+      else
+        check_component(where, node)
+      end
     end
   elseif opts.items ~= nil and type(opts.items) ~= 'function' then
     error('devhub.gui.view: items must be a function or a table', 2)

@@ -152,6 +152,12 @@ check(#calls.view == 1 and calls.view[1].frame.win == 1 and framed.id == 1, 'a f
 check(not pcall(gui.view, { buf = 0, frame = { win = 1, title = { type = 'nope' } } }), 'a frame\'s bad title is an error')
 check(not pcall(gui.view, { buf = 0, frame = {} }), 'a frame needs its window')
 
+-- A tree: items as { node, depth, sticky } are checked by their node.
+calls.view = {}
+gui.view { buf = 0, indent = 16, row_height = 22, items = { [1] = { node = ui.text 'root', sticky = true, depth = 0 }, [2] = { node = ui.text 'a', depth = 1 } } }
+check(#calls.view == 1 and calls.view[1].indent == 16 and calls.view[1].row_height == 22, 'a tree view forwarded')
+check(not pcall(gui.view, { buf = 0, items = { [1] = { node = { type = 'nope' }, depth = 1 } } }), 'a tree item\'s bad node is an error')
+
 -- LSP floats as popups: hover, signature help, diagnostics.
 calls.popup = {}
 local function fake_popup(opts)
