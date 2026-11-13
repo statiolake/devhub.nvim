@@ -893,6 +893,11 @@ function M.hook_floats_on_lsp()
     once = true,
     callback = function()
       M.hook_floats()
+      -- The pointer's go to definition (lua/devhub/definition.lua): DevHub
+      -- asks it while the modifier is held.
+      if vim.g.devhub_definition_links ~= false then
+        require 'devhub.definition'
+      end
     end,
   })
 end

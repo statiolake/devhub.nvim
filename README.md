@@ -126,6 +126,27 @@ end
   `ui.md(text, { marks = … })`). Outside DevHub or on
   any error, Neovim's own float. Set `vim.g.devhub_rich_floats = false` to
   keep Neovim's always.
+- **Go to definition with the pointer, as VS Code's Cmd-click.** In
+  DevHub's GUI, hold Option (Alt; `[editor] definition_modifier` in DevHub's
+  settings: `"alt"`, `"cmd"`, `"ctrl"` or `"off"`) over a symbol: when an
+  LSP client of the buffer has a definition for it, DevHub draws it as a
+  link — underlined, in `@markup.link`'s colour (else `Underlined`'s) — and
+  the pointer is a hand. A click with Option on it is the jump: the cursor
+  goes on the symbol and `vim.lsp.buf.definition()` runs, exactly as typed
+  there (the jumplist for `<C-o>`, the tag stack for `<C-t>`, several
+  results in the quickfix list, another file in the same window). The click
+  itself never reaches Neovim, so no cursor move or Visual drag comes first;
+  anywhere that is not such a symbol the click is Neovim's, unchanged (its
+  own `<A-LeftMouse>`: a blockwise Visual). `lua/devhub/definition.lua` does
+  Neovim's half, loaded at the first `LspAttach`: the screen cell to the
+  buffer by `screenpos()` (wrap, folds, inline virtual text, horizontal
+  scrolling; a concealed character is checked against what the screen shows
+  and is no link), the `iskeyword` word, one `textDocument/definition`
+  request at a time (the next word cancels it), answers kept by
+  `changedtick` and word. Nothing is asked while the modifier is up, and
+  nothing is put in the buffer: the link is DevHub's own drawing, gone in
+  the frame the key goes up. `vim.g.devhub_definition_links = false` turns
+  it off. The keyboard keeps `<C-]>` and your own mappings.
 - `:DevhubImageDemo [path]` and `:DevhubGuiDemo` come from DevHub. There
   is no DevHub terminal inside Neovim: the Workspace's terminal is DevHub's
   editor area itself, and Neovim's own `:terminal` is drawn as usual.
@@ -553,7 +574,8 @@ tests/run.sh   # nvim --headless: startup highlights are the theme file's
                # table, every group, before any event; a live switch and back is identical; a
                # replaced file is followed; setup() outside DevHub is a no-op;
                # the component builders, the GUI facade over a stand-in for
-               # DevHub
+               # DevHub; the pointer's go to definition against a fake
+               # language server (cell to word, caching, cancelling, the jump)
 tests/fixtures/regenerate.sh <DevHub checkout>  # the fixtures, from DevHub's generator
 ```
 
