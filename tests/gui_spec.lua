@@ -161,6 +161,48 @@ gui.view { buf = 0, indent = 16, row_height = 22, items = { [1] = { node = ui.te
 check(#calls.view == 1 and calls.view[1].indent == 16 and calls.view[1].row_height == 22, 'a tree view forwarded')
 check(not pcall(gui.view, { buf = 0, items = { [1] = { node = { type = 'nope' }, depth = 1 } } }), 'a tree item\'s bad node is an error')
 
+-- Menus: a view's on_context_menu is a function; gui.menu's items are
+-- checked, forwarded to a DevHub that has menus, else vim.ui.select.
+check(not pcall(gui.view, { buf = 0, on_context_menu = {} }), 'on_context_menu is a function')
+calls.view = {}
+gui.view { buf = 0, on_context_menu = function() return { { label = 'Open' } } end }
+check(#calls.view == 1 and type(calls.view[1].on_context_menu) == 'function', 'on_context_menu forwarded')
+check(not pcall(gui.menu, { items = { { label = 1 } } }), 'a label is a string')
+check(not pcall(gui.menu, { items = { { label = 'A', enabled = 'no' } } }), 'enabled is a boolean')
+check(not pcall(gui.menu, { items = { { label = 'A', submenu = { { label = 'B', accelerator = 1 } } } } }), 'a submenu\'s items are checked')
+check(not pcall(gui.menu, { items = 'Open' }), 'items is a list')
+do
+  -- a DevHub before menus: vim.ui.select, enabled leaves only, a submenu's joined
+  local listed, chosen
+  local before = vim.ui.select
+  vim.ui.select = function(items, o, on_choice)
+    listed = vim.tbl_map(o.format_item, items)
+    on_choice(items[2], 2)
+  end
+  gui.menu {
+    items = {
+      { label = 'Open', accelerator = '<CR>' },
+      { label = 'Gone', enabled = false },
+      '-',
+      { label = 'Copy', submenu = { { label = 'Name', on_select = function() chosen = 'name' end } } },
+    },
+  }
+  vim.ui.select = before
+  check(vim.deep_equal(listed, { 'Open (<CR>)', 'Copy › Name' }), 'the fallback lists: ' .. vim.inspect(listed))
+  check(chosen == 'name', 'the fallback runs the item chosen')
+  -- a DevHub with menus: forwarded
+  local menus = {}
+  core.menu = function(o)
+    table.insert(menus, o)
+    return 9
+  end
+  core.context_menu = function()
+    return 'ctx'
+  end
+  check(gui.menu { items = { { label = 'A' } }, line = 3 } == 9 and menus[1].line == 3, 'gui.menu forwarded')
+  check(gui.context_menu() == 'ctx', 'context_menu forwarded')
+end
+
 -- LSP floats as popups: hover, signature help, diagnostics.
 calls.popup = {}
 local function fake_popup(opts)

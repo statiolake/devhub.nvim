@@ -265,6 +265,9 @@ end
 ---   opts.row_height  each item's least height, in pixels
 ---   opts.on_click fn(lnum, clicks): a click on an item (after the cursor
 ---               moved there; in a frame the keys stay in its query)
+---   opts.on_context_menu fn(lnum) -> items | nil: the item's menu (gui.menu's
+---               items), put up natively on a right-click at the pointer, and
+---               by <S-F10> (or the menu key) under the cursor's item
 ---   opts.frame  { win, query = { win, placeholder? }, preview = { win, title? },
 ---               title?, status? }: draw the view in a frame over the float
 ---               win instead of over its window — a picker's frontend. Your
@@ -302,6 +305,9 @@ function M.view(opts)
   elseif opts.items ~= nil and type(opts.items) ~= 'function' then
     error('devhub.gui.view: items must be a function or a table', 2)
   end
+  if opts.on_context_menu ~= nil and type(opts.on_context_menu) ~= 'function' then
+    error('devhub.gui.view: on_context_menu must be a function (lnum) -> items', 2)
+  end
   if opts.frame ~= nil then
     if type(opts.frame) ~= 'table' or opts.frame.win == nil then
       error('devhub.gui.view: frame must be { win, query?, preview?, title?, status? }', 2)
@@ -318,6 +324,119 @@ function M.view(opts)
   return deferred(function(c)
     return c.view and c.view(opts)
   end)
+end
+
+-- Why items are not a menu, or nil.
+local function menu_error(items, where)
+  if type(items) ~= 'table' then
+    return where .. ' must be a list'
+  end
+  for i, item in ipairs(items) do
+    local at = where .. '[' .. i .. ']'
+    if item ~= '-' then
+      if type(item) ~= 'table' then
+        return at .. ' must be a table or "-"'
+      end
+      if item.separator ~= true then
+        if type(item.label) ~= 'string' or item.label == '' then
+          return at .. '.label must be a string'
+        end
+        if item.enabled ~= nil and type(item.enabled) ~= 'boolean' then
+          return at .. '.enabled must be a boolean'
+        end
+        if item.accelerator ~= nil and type(item.accelerator) ~= 'string' then
+          return at .. '.accelerator must be keys as Vim writes them'
+        end
+        if item.on_select ~= nil and type(item.on_select) ~= 'function' then
+          return at .. '.on_select must be a function'
+        end
+        if item.submenu ~= nil then
+          local err = menu_error(item.submenu, at .. '.submenu')
+          if err then
+            return err
+          end
+        end
+      end
+    end
+  end
+  return nil
+end
+M._menu_error = menu_error
+
+-- Outside DevHub (or a DevHub before menus): the items that can be chosen,
+-- a submenu's as "Parent › Child", in vim.ui.select.
+local function select_menu(opts)
+  local flat = {}
+  local function walk(items, prefix)
+    for _, item in ipairs(items) do
+      if type(item) == 'table' and item.separator ~= true and item.enabled ~= false then
+        local label = prefix .. item.label
+        if item.submenu then
+          walk(item.submenu, label .. ' › ')
+        else
+          table.insert(flat, { item = item, label = item.accelerator and (label .. ' (' .. item.accelerator .. ')') or label })
+        end
+      end
+    end
+  end
+  walk(opts.items, '')
+  if #flat == 0 then
+    return
+  end
+  local order = {}
+  for i, entry in ipairs(flat) do
+    order[entry.item] = i
+  end
+  vim.ui.select(flat, {
+    prompt = opts.prompt,
+    format_item = function(entry)
+      return entry.label
+    end,
+  }, function(entry)
+    if not entry then
+      return
+    end
+    if entry.item.on_select then
+      entry.item.on_select()
+    elseif opts.on_select then
+      opts.on_select(entry.item, order[entry.item])
+    end
+  end)
+end
+
+--- A native menu (DevHub's, as its sidebar's and links' are).
+---   opts.items  { { label, enabled?, accelerator?, submenu?, on_select? } |
+---               { separator = true } | '-' }: accelerator is the key that
+---               does the same, as Vim writes it (shown beside the label)
+---   opts.on_select fn(item, index): what was chosen, when the item has no
+---               on_select of its own (index: among the items that can be
+---               chosen, in order)
+---   opts.win, opts.line: under that line's item (a view's row) or cell;
+---               default: the current window's cursor
+--- Outside DevHub: vim.ui.select of the items that can be chosen.
+function M.menu(opts)
+  opts = opts or {}
+  local err = menu_error(opts.items, 'items')
+  if err then
+    error('devhub.gui.menu: ' .. err, 2)
+  end
+  local c = core()
+  if c and c.menu then
+    return c.menu(opts)
+  end
+  select_menu(opts)
+  return nil
+end
+
+--- The keyboard's right-click: the current window's view's menu for the
+--- cursor's item (its on_context_menu), under the item. DevHub maps <S-F10>
+--- to it in a view's buffer; map another key to it if you like.
+function M.context_menu()
+  local c = core()
+  if c and c.context_menu then
+    return c.context_menu()
+  end
+  return nil
 end
 
 --- A card under line lnum of buf, in rows Neovim reserves (virt_lines) and

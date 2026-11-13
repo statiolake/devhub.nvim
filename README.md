@@ -209,6 +209,36 @@ view:close()
 lines selected are drawn selected, so keys that work on a range read as
 they do in the cells.
 
+#### A menu
+
+`on_context_menu = function(lnum) return items end` gives a view's items a
+menu: DevHub puts it up natively — the same menu as its sidebar's rows and
+its links — at the pointer for a right-click (the row is focused first; it
+is no click), and under the cursor's item for `<S-F10>` or the menu key
+(mapped in the view's buffer unless you map that key there yourself;
+`gui.context_menu()` is the same, for a key of yours). Return `nil` or `{}`
+for no menu. `gui.menu{ items, on_select? }` puts one up on its own, under
+the cursor.
+
+```lua
+gui.menu {
+  items = {
+    { label = 'Open', accelerator = '<CR>', on_select = open },
+    { label = 'Rename…', accelerator = 'r', on_select = rename },
+    { label = 'Paste', accelerator = 'p', enabled = has_clipboard },
+    { separator = true },                -- or '-'
+    { label = 'Copy', submenu = { { label = 'Copy Name', accelerator = 'y' } } },
+  },
+  on_select = function(item, index) end, -- for an item without on_select
+}
+```
+
+`accelerator` is the key that does the same, as Vim writes it: one key
+(`a`, `R`, `<C-v>`, `<CR>`) is shown in the menu's key column, a sequence
+(`gy`) after the label as `[gy]`. It is only shown: the key is still
+Neovim's. Outside DevHub (or in a DevHub before menus) `gui.menu` is
+`vim.ui.select` of the items that can be chosen.
+
 #### A tree
 
 Given `indent` (pixels per level), a view is a tree: an item
