@@ -51,6 +51,9 @@ check(gui.popup { component = ui.md 'x' } == nil, 'a popup outside DevHub is nil
 check(gui.statusline(function() end) == false, 'statusline outside DevHub: nothing')
 check(not gui.has_statusline(), 'no footers outside DevHub')
 check(not gui.has_cmdline_popup(), 'no command-line popups outside DevHub')
+check(gui.document { text = '# x' } == nil and not gui.has_document(), 'no document outside DevHub')
+check(not pcall(gui.document, { text = 'x', format = 'html' }), 'a document is markdown')
+check(not pcall(gui.document, {}), 'a document has text')
 check(not pcall(gui.statusline, 42), 'statusline takes a function, a choice or nil')
 check(not pcall(gui.statusline, nil, { events = 'BufAdd' }), 'statusline events are a list')
 -- The LSP float hook leaves Neovim's own float outside DevHub.
@@ -217,6 +220,22 @@ core.popup = fake_popup
 
 -- vim.ui.select / input: forwarded to DevHub's quick pick when it is there,
 -- installed over what was there, and that kept for outside DevHub.
+-- A document: forwarded, with its handle.
+check(not gui.has_document(), 'a DevHub before documents')
+do
+  local opened
+  core.document = function(opts)
+    opened = opts
+    return { id = 9, update = function(_, text) opened.text = text end }
+  end
+  check(gui.has_document(), 'a DevHub that draws documents')
+  local doc = gui.document { text = '# a', base = '/tmp', split = 'right', on_link = function() end }
+  check(doc and doc.id == 9 and opened.base == '/tmp' and type(opened.on_link) == 'function', 'document forwarded')
+  doc:update '# b'
+  check(opened.text == '# b', 'the handle is the core\'s')
+  core.document = nil
+end
+
 do
   local asked
   core.select = function(items, _, on_choice)

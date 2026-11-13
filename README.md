@@ -378,6 +378,45 @@ being typed `gui.popup` answers `nil`; `gui.has_cmdline_popup()` says
 whether this DevHub takes `anchor = 'cmdline'` at all (an older one does
 not: draw your own there).
 
+### `gui.document`: a rendered document beside a window
+
+```lua
+local doc = gui.document {
+  text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'),
+  format = 'markdown',                    -- the only one
+  base = vim.fn.expand '%:p:h',           -- where relative links and pictures are found
+  split = 'right',                        -- 'left' | 'below' | 'above', or a window
+  title = 'README.md',
+  remote_images = false,                  -- pictures from the web: a placeholder unless true
+  on_link = function(link) end,           -- { path, line?, col?, href }: true when handled
+  scroll = { line = 1 },                  -- the source line at the top to start with
+  on_close = function(doc) end,           -- it closed: q, :close, :only
+}
+doc:update(text)                          -- the whole text again (base too: doc:update(text, dir))
+doc:scroll_to(42)                         -- source line 42 at the top
+doc:view()                                -- { top, bottom }: the source lines in sight
+doc:close(); doc:is_open()
+```
+
+DevHub draws the text with the renderer its own conversations use — GFM
+tables, task lists, code in its language's colours, KaTeX math, Mermaid
+diagrams, the same typesetting and link menus — in an ordinary window
+(`:close`, `<C-w>` moves and layouts are Neovim's) on a scratch buffer that
+holds the text, line for line (`/` finds a word in it). Pictures and linked
+files are looked for relative to `base` on this Neovim's machine and read
+there, over SSH too; nothing is fetched from the web unless you ask for
+pictures from it. A URL opens in the browser (right-click for its menu); a
+link to a file opens in the window the document was opened from (or your
+`on_link`); a `#heading` scrolls the document.
+
+Neovim keeps the keys: in its window `j`/`k`, `<C-d>`/`<C-u>`,
+`<C-f>`/`<C-b>`, `gg`/`G` scroll, `<Tab>`/`<S-Tab>` move between links
+and `<CR>` follows one, `<Esc>` goes back to the window you came from, `q`
+closes it; the wheel scrolls it too. Each block is tagged with the source
+line it starts at, so `scroll_to` puts a source line at the top however
+tall the drawing above it is. Outside DevHub `gui.document` answers `nil`;
+`gui.has_document()` says whether this DevHub draws them.
+
 ### `gui.statusline`: each window's footer
 
 DevHub does not draw Neovim's status line cells: it draws each window's

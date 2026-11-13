@@ -335,6 +335,59 @@ function M.inline(opts)
   end)
 end
 
+--- A document DevHub renders in a window of its own beside the current one
+--- — Markdown, drawn by the renderer DevHub's conversations use (tables,
+--- task lists, code colouring, math, Mermaid) — a preview, whoever's.
+---   opts.text       the source (a string, or a list of lines)
+---   opts.format     'markdown' (the only one)
+---   opts.base       the folder relative links and pictures are found in
+---                   (on this Neovim's machine: an SSH host's, read there)
+---   opts.split      'right' (default) | 'left' | 'below' | 'above', or a window
+---   opts.enter      go into its window (default false: the keys stay here)
+---   opts.title      what its buffer is called
+---   opts.remote_images  draw pictures from the web (default false: a placeholder)
+---   opts.on_link    fn(link): a link to a file followed, link = { path,
+---                   line?, col?, href }; true when you handled it (else the
+---                   file opens in the window the document was opened from)
+---   opts.scroll     { line = n }: the source line to start at the top
+---   opts.on_close   fn(handle): it closed (q, :close, its buffer wiped)
+--- A URL opens in the browser; a #heading scrolls the document. Its
+--- window's keys: j/k, <C-d>/<C-u>, <C-f>/<C-b>, gg/G scroll; <Tab>/<S-Tab>
+--- move between links, <CR> follows one; <Esc> goes back; q closes.
+--- Answers a handle: :update(text, base?), :scroll_to(line) (that source
+--- line at the top), :view() ({ top, bottom }: the source lines in sight),
+--- :close(), :is_open() — or nil outside DevHub. While DevHub's GUI is still
+--- attaching, the handle works from the attach on.
+function M.document(opts)
+  opts = opts or {}
+  if opts.format ~= nil and opts.format ~= 'markdown' then
+    error("devhub.gui.document: format must be 'markdown'", 2)
+  end
+  if type(opts.text) ~= 'string' and type(opts.text) ~= 'table' then
+    error('devhub.gui.document: text must be a string or a list of lines', 2)
+  end
+  if not M.available() then
+    return nil
+  end
+  local c = core()
+  if c then
+    return c.document and c.document(opts) or nil
+  end
+  return deferred(function(now)
+    return now.document and now.document(opts)
+  end)
+end
+
+--- Whether this DevHub draws gui.document (false outside DevHub's GUI, and
+--- in a DevHub before it).
+function M.has_document()
+  local c = core()
+  if c then
+    return c.document ~= nil
+  end
+  return vim.env.DEVHUB_NEOVIM_GUI == '1'
+end
+
 --- Ring an inline card as focused (or not), whatever the cursor says.
 function M.inline_focus(handle, on)
   local c = core()
