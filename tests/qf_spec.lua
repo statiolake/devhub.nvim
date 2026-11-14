@@ -77,6 +77,10 @@ function core.view(opts)
   views[opts.buf] = v
   return { id = #vim.tbl_keys(views), buf = opts.buf, update = v.update, redraw = v.redraw, close = v.close }
 end
+local footers = {}
+function core.statusline_buffer(buf, footer)
+  footers[buf] = footer == nil and 'none' or footer
+end
 package.loaded['devhub_gui'] = core
 qf.install()
 
@@ -257,6 +261,13 @@ vim.cmd 'copen'
 check(vim.fn.getqflist({ qfbufnr = 0 }).qfbufnr == qbuf and views[qbuf] == view and not view.closed, ':copen again: the same view')
 vim.cmd 'cclose'
 
+-- 8b. The window's footer: empty while the view draws it (the ftplugin's
+-- statusline, the title again in cells, is not drawn), the option untouched.
+check(footers[qbuf] == false, 'the qf window\'s footer is empty: ' .. tostring(footers[qbuf]))
+vim.cmd 'copen'
+local stl = vim.wo.statusline
+check(stl ~= '', 'the ftplugin\'s statusline is left as it is')
+
 -- 9. vim.g.devhub_native_qf = false: Neovim's cells.
 vim.g.devhub_native_qf = false
 vim.cmd 'new'
@@ -264,6 +275,11 @@ vim.fn.setloclist(0, {}, ' ', { title = 'off', items = { { filename = b, lnum = 
 vim.cmd 'lopen'
 check(views[vim.api.nvim_get_current_buf()] == nil, 'opted out: no view')
 vim.cmd 'lclose'
+-- turned off while drawn: the views let go, the statusline is cells again
+qf.refresh()
+check(view.closed and footers[qbuf] == 'none', 'turned off: the view and its footer let go')
+check(vim.wo[vim.fn.getqflist({ winid = 0 }).winid].statusline == stl, 'the statusline is the ftplugin\'s again')
+vim.cmd 'cclose'
 vim.g.devhub_native_qf = nil
 
 -- 10. The pattern from a title.

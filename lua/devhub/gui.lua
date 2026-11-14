@@ -666,6 +666,47 @@ function M.statusline(fn, opts)
   return false
 end
 
+-- The footers buffers were given (gui.footer), made again at every attach.
+local buffer_footers = {}
+
+--- gui.footer(buf, footer): the footer of every window showing buf, over a
+--- window's own statusline: a component, false (an empty footer), or
+--- fn(win, current) answering either (nil: DevHub's rules). nil lets go:
+--- the window's own statusline, untouched, is drawn again. For a view that
+--- draws its window natively (the quickfix window's). A tree your
+--- gui.statusline function answers wins. Outside DevHub it does nothing.
+function M.footer(buf, footer)
+  if buf == nil or buf == 0 then
+    buf = vim.api.nvim_get_current_buf()
+  end
+  if footer ~= nil and footer ~= false and type(footer) ~= 'function' then
+    check_component('footer', footer)
+  end
+  buffer_footers[buf] = footer
+  local c = core()
+  if c and c.statusline_buffer then
+    c.statusline_buffer(buf, footer)
+  end
+end
+
+vim.api.nvim_create_autocmd('User', {
+  pattern = 'DevhubGui',
+  group = vim.api.nvim_create_augroup('devhub_gui_footer_facade', { clear = true }),
+  callback = function()
+    local c = core()
+    if not (c and c.statusline_buffer) then
+      return
+    end
+    for buf, footer in pairs(buffer_footers) do
+      if vim.api.nvim_buf_is_valid(buf) then
+        c.statusline_buffer(buf, footer)
+      else
+        buffer_footers[buf] = nil
+      end
+    end
+  end,
+})
+
 --- Make the footers again now (your plugin's state changed).
 function M.statusline_refresh()
   local c = core()

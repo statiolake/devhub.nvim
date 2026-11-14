@@ -429,12 +429,17 @@ function M.attach(buf)
     return
   end
   attached[buf].view = view
+  -- The window's footer: empty, not the ftplugin's statusline in cells (the
+  -- title row says its title and position). The option is left as it is,
+  -- so letting go (M.detach) shows it again.
+  gui.footer(buf, false)
   vim.api.nvim_create_autocmd('BufWipeout', {
     buffer = buf,
     once = true,
     callback = function()
       attached[buf] = nil
       snapshots[buf] = nil
+      require('devhub.gui').footer(buf, nil)
     end,
   })
 end
@@ -446,12 +451,21 @@ function M.detach(buf)
   snapshots[buf] = nil
   if a and a.view then
     a.view:close()
+    require('devhub.gui').footer(buf, nil)
   end
 end
 
 --- Draw again each view whose list changed without its buffer: the
 --- current item (`:cnext`, `setqflist({}, 'a', { idx })`), the title.
 function M.refresh()
+  -- Turned off (vim.g.devhub_native_qf = false): Neovim's cells again, its
+  -- statusline with them.
+  if not M.active() then
+    for buf in pairs(attached) do
+      M.detach(buf)
+    end
+    return
+  end
   for buf, a in pairs(attached) do
     if a.view and vim.api.nvim_buf_is_valid(buf) then
       local which = list_of(buf)

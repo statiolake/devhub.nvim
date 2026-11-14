@@ -591,6 +591,13 @@ end, { events = { 'BufAdd' } })
 - `ui.line{}` is drawn at the height of the window boundaries' lines, so a
   boundary ending beside it meets it. A node with `on_click` runs it on a
   click; any other press is Neovim's (a drag of the row resizes).
+- `gui.footer(buf, footer)` gives every window showing `buf` a footer of
+  its own, over a window's own `statusline` (whose cells it would
+  otherwise be): a tree, `false` (an empty footer) or
+  `function(win, current)` answering either; `nil` lets go and the
+  window's own statusline is drawn again. For a view that draws its window
+  natively (the quickfix window). A tree your `gui.statusline` function
+  answers wins.
 - `gui.statusline('default')` draws DevHub's default footer even with a
   global `statusline` of yours (as `vim.g.devhub_statusline = 'default'`);
   `gui.statusline('cells')` Neovim's cells everywhere; `gui.statusline(nil)`
@@ -647,6 +654,11 @@ line, made from the list itself (`getqflist`/`getloclist`):
 - the list's current item (`:cc`, `:cnext`) is marked; the title row says
   which list it is, its title, which of the lists (`:colder`) and the
   position.
+
+Its footer is DevHub's, empty (`gui.footer`): the title is said once, in
+the title row, not again by the qf ftplugin's statusline in cells. The
+`statusline` option is not touched, so with the native drawing off your
+(or the ftplugin's) status line is back as it was.
 
 A click moves the cursor (the row is focused at once), a double click is
 `<CR>` there (your mapping of it, else Neovim's jump), the wheel scrolls.
