@@ -345,6 +345,35 @@ list:frame { status = ui.text '2 / 9' }
 list:redraw()                             -- the list's cursor moved without an edit
 ```
 
+#### A frame round an editable window: a composer
+
+`gui.frame` is the same frame round a window you write in instead of a
+list: a composer's frontend (a review comment, a commit message), whoever's
+composer it is. The **body** stays Neovim's cells — its buffer edited as any,
+with its modes, motions, undo and maps — and DevHub draws the rest where your
+plugin's windows stand: the **header** on the rows of the frame's float above
+the body (`title`, then `status` at its right end), the **hint row** on every
+row of it below the body (`keys`, then `actions` at its right end: buttons
+whose `on_click` does what their keys do, so nothing is the pointer's only).
+Lay the body over the frame's float, borderless, a cell in from its sides:
+DevHub adds no padding of its own. Closing the frame's float ends it; close
+it with the body. Outside DevHub, or in a DevHub without frames, it answers
+`nil`, and your float stays as it was.
+
+```lua
+local composer = gui.frame {
+  win = frame_win,                        -- a blank float, a row or two taller than the body each way
+  body = body_win,                        -- over it: the buffer you write in
+  title = ui.text { { 'Comment', bold = true }, { '  a.ts L12', hl = 'Comment' } },
+  keys = { { '<C-s>', 'send' }, { 'q', 'cancel (Normal)' } },
+  actions = ui.hstack { ui.button('Cancel', { on_click = cancel }), ui.button('Send', { tone = 'accent', on_click = send }) },
+}
+composer:frame { status = ui.text 'draft' }
+```
+
+[review-relay-ui.devhub](https://github.com/statiolake/review-relay-ui.devhub)
+draws vscode-review-relay's comment composer this way.
+
 ### `gui.inline`: a card under a line
 
 ```lua

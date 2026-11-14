@@ -42,6 +42,7 @@ local ui = gui.ui
 check(not gui.available(), 'available outside DevHub')
 local h = gui.view { buf = 0, items = {} }
 check(h and h.pending, 'a view outside DevHub is a pending handle')
+check(gui.frame { win = 1, body = 2 } == nil, 'a frame outside DevHub is nil')
 h:update()
 h:close()
 check(gui.override_notify() == false, 'override_notify outside DevHub')
@@ -154,6 +155,25 @@ local framed = gui.view { buf = 0, win = 2, items = function() end, frame = { wi
 check(#calls.view == 1 and calls.view[1].frame.win == 1 and framed.id == 1, 'a framed view forwarded')
 check(not pcall(gui.view, { buf = 0, frame = { win = 1, title = { type = 'nope' } } }), 'a frame\'s bad title is an error')
 check(not pcall(gui.view, { buf = 0, frame = {} }), 'a frame needs its window')
+
+-- A frame round an editable window (a composer): its parts checked, then
+-- forwarded; nil from a DevHub without frames, the plugin's float kept.
+check(not pcall(gui.frame, { win = 1 }), 'a frame needs its body')
+check(not pcall(gui.frame, { win = 1, body = 2, actions = { type = 'nope' } }), 'a frame\'s bad actions are an error')
+check(gui.frame { win = 1, body = 2 } == nil, 'a DevHub without frames: nil')
+function core.frame(opts)
+  calls.frame = opts
+  return { id = 7 }
+end
+local composer = gui.frame {
+  win = 1,
+  body = 2,
+  title = ui.text 'Comment',
+  keys = { { '<C-s>', 'send' } },
+  actions = ui.button('Send', { on_click = function() end }),
+}
+check(composer and composer.id == 7 and calls.frame.body == 2 and calls.frame.keys[1][1] == '<C-s>', 'a frame forwarded')
+core.frame = nil
 
 -- A tree: items as { node, depth, sticky } are checked by their node.
 calls.view = {}

@@ -326,6 +326,37 @@ function M.view(opts)
   end)
 end
 
+--- A framed view's frame round an editable window instead of a list: a
+--- composer's frontend, whoever's composer it is.
+---   opts.win    the float the frame covers (a blank one your plugin lays out)
+---   opts.body   a window over it that stays Neovim's cells: a buffer edited
+---               as any, its modes, undo and maps the plugin's own
+---   opts.title, opts.status  components on the header band: the rows of win
+---               above body (title first, status at its right end)
+---   opts.keys   { { '<C-s>', 'send' }, … }: the hint row, every row of win
+---               under body, keys as Vim writes them
+---   opts.actions a component at the hint row's right end: buttons whose
+---               on_click runs in Lua (doing what their keys do, never more)
+--- Answers a handle: :frame{ title?, status?, actions? }, :close(); closing
+--- win ends it. Outside DevHub, or in a DevHub without frames, nil: the
+--- plugin keeps its own float.
+function M.frame(opts)
+  opts = opts or {}
+  if opts.win == nil or opts.body == nil then
+    error('devhub.gui.frame: win and body must be windows', 2)
+  end
+  for _, key in ipairs({ 'title', 'status', 'actions' }) do
+    if opts[key] ~= nil then
+      check_component('frame (' .. key .. ')', opts[key])
+    end
+  end
+  local c = core()
+  if not (c and c.frame) then
+    return nil
+  end
+  return c.frame(opts)
+end
+
 -- Why items are not a menu, or nil.
 local function menu_error(items, where)
   if type(items) ~= 'table' then
