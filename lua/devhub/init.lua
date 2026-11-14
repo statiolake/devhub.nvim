@@ -252,6 +252,9 @@ function M.setup(options)
   M.config = vim.tbl_extend('force', M.config, options or {})
   if M.gui.available() then
     M.gui.hook_floats_on_lsp()
+    -- The quickfix and location-list windows, drawn natively
+    -- (vim.g.devhub_native_qf = false: Neovim's cells).
+    require('devhub.qf').install()
     if M.config.notify then
       M.gui.override_notify()
     end
@@ -284,6 +287,7 @@ function M._startup()
   vim.g.devhub_loaded = true
   if vim.env.DEVHUB_NEOVIM_GUI == '1' then
     M.gui.hook_floats_on_lsp()
+    require('devhub.qf').install()
   end
   if not M.inside() then
     return

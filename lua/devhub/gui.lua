@@ -280,6 +280,10 @@ end
 ---               as the hint row. Keys stay the buffers' maps.
 ---   opts.on_scroll fn(rows), opts.on_rows fn(rows): in a frame, the wheel,
 ---               and how many items fit (a plugin that pages)
+---   opts.header component | fn() -> component: a row above the items that is
+---               not one (a list's title); a function is asked again at each draw
+---   opts.sticky_headings true: each item's heading is held at the top while
+---               the items under it (to the next heading) scroll
 ---   opts.keys   { { 'j/k', 'move' }, { '<CR>', 'open' } }: the hint line,
 ---               keys as Vim writes them (DevHub shows them as a Mac does: ↩, ⌃V)
 --- Answers a handle: :update(items?) to draw again, :frame{ title?, status?,
@@ -304,6 +308,11 @@ function M.view(opts)
     end
   elseif opts.items ~= nil and type(opts.items) ~= 'function' then
     error('devhub.gui.view: items must be a function or a table', 2)
+  end
+  if type(opts.header) == 'table' then
+    check_component('view (header)', opts.header)
+  elseif opts.header ~= nil and type(opts.header) ~= 'function' then
+    error('devhub.gui.view: header must be a component or a function', 2)
   end
   if opts.on_context_menu ~= nil and type(opts.on_context_menu) ~= 'function' then
     error('devhub.gui.view: on_context_menu must be a function (lnum) -> items', 2)

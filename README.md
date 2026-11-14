@@ -245,7 +245,14 @@ view:update()                             -- draw again (state the items read ch
 view:close()
 ```
 
-`on_click(lnum, clicks)` gets 2 for a double click. In Visual mode the
+`on_click(lnum, clicks)` gets 2 for a double click. An item may be
+`{ node = …, heading = … }`: a heading drawn above the item that is not an
+item (outside its focus; a press on it is a press on the item), as a file's
+name over its matches; `sticky_headings = true` holds each heading at the
+top while the items under it, to the next heading, scroll. `header` (a
+component, or a function asked again at every draw) is a row above the
+items that is not one, a list's title. A run with `mark = true` is drawn on
+its group's ground, a search's match (`{ 'needle', hl = 'Search', mark = true }`). In Visual mode the
 lines selected are drawn selected, so keys that work on a range read as
 they do in the cells.
 
@@ -615,6 +622,37 @@ float, newest last: `j`/`k`, `/` and `y` as anywhere, `q` closes, `<Tab>`
 switches to Neovim's `:messages` (`:DevhubNotifications` is the same pager
 without this plugin). Outside DevHub it is `:messages`.
 
+### The quickfix and location-list windows
+
+In DevHub's GUI the quickfix and location-list windows are drawn natively,
+as DevHub's other lists are — with nothing to set up. Neovim keeps the
+window, the buffer and the keys, so `:copen`/`:cclose`, `:cnext`/`:cprev`,
+`:lopen`, `<CR>`, `:colder`/`:cnewer`, `:cdo`, your qf mappings and
+ftplugin, `quickfixtextfunc` (its lines are what `/` searches) and every
+plugin that fills a list (`vim.diagnostic.setqflist`, the LSP's
+references, `:grep`, `:vimgrep`, `:make`, snacks' `<C-q>`) work as they
+do. Only the drawing changes: the qf buffer is a `gui.view`, one row per
+line, made from the list itself (`getqflist`/`getloclist`):
+
+- each run of items in one file is under a **heading** — the file's icon
+  (nvim-web-devicons or mini.icons), its name, its directory dimmed and how
+  many items it has — held at the top while its items scroll, as VS Code's
+  Search and Problems panels keep it. A heading is not a line: line N is
+  still item N, for the cursor, `5j`, `:.cc` and `<CR>`;
+- an item is its position (`12:5`), its type (E/W/I/N) as the diagnostic
+  sign your `vim.diagnostic.config()` draws, in its colour, and its text: a
+  message in the UI's face, code (a grep's line, a reference) in the grid's
+  face with the match marked — from the item's end column (`:vimgrep`, LSP
+  references) or the pattern in the list's title (`rg --vimgrep`);
+- the list's current item (`:cc`, `:cnext`) is marked; the title row says
+  which list it is, its title, which of the lists (`:colder`) and the
+  position.
+
+A click moves the cursor (the row is focused at once), a double click is
+`<CR>` there (your mapping of it, else Neovim's jump), the wheel scrolls.
+`vim.g.devhub_native_qf = false` keeps Neovim's cells. Outside DevHub's GUI
+nothing changes.
+
 ### Choices: `quick_pick = true`
 
 ```lua
@@ -659,7 +697,9 @@ tests/run.sh   # nvim --headless: startup highlights are the theme file's
                # the component builders, the GUI facade over a stand-in for
                # DevHub; the pointer's go to definition against a fake
                # language server, driven as DevHub drives it (nvim_input_mouse
-               # over RPC: the mappings, the link, its release, the jump)
+               # over RPC: the mappings, the link, its release, the jump); the
+               # quickfix window's rows (headings, matches, signs, the current
+               # item), the cursor and <CR>, :cnext/:colder and location lists
 tests/fixtures/regenerate.sh <DevHub checkout>  # the fixtures, from DevHub's generator
 ```
 

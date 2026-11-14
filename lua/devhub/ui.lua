@@ -126,8 +126,9 @@ function M.card(t)
   return node
 end
 
+-- mark: a mark over the text (a search's match), on its group's ground.
 local RUN = { hl = 'string', tone = 'string', mono = 'boolean', bold = 'boolean', italic = 'boolean',
-  dim = 'boolean', strike = 'boolean', underline = 'boolean' }
+  dim = 'boolean', strike = 'boolean', underline = 'boolean', mark = 'boolean' }
 
 --- Text: ui.text('plain', opts), or runs: ui.text{ 'a ', { 'b', hl = 'Comment', mono = true }, size = 'sm' }.
 --- opts: size = 'xs' | 'sm' | 'md' | 'lg', mono, bold, dim, wrap, upper, hl | tone,

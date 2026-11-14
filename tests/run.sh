@@ -21,3 +21,6 @@ echo "gui and components:"
 echo "definition links:"
 "$NVIM" --headless --clean --cmd "set rtp^=$PWD" \
   -c "lua local ok, e = pcall(dofile, 'tests/definition_spec.lua'); if not ok then io.stderr:write('FAIL\n  ' .. tostring(e) .. '\n'); vim.cmd 'cquit 1' end; vim.cmd 'qa!'" </dev/null
+echo; echo "quickfix:"
+"$NVIM" --headless --clean --cmd "set rtp^=$PWD" \
+  -c "lua local ok, e = pcall(dofile, 'tests/qf_spec.lua'); if not ok then io.stderr:write('FAIL\n  ' .. tostring(e) .. '\n'); vim.cmd 'cquit 1' end" </dev/null
