@@ -126,28 +126,43 @@ end
   `ui.md(text, { marks = … })`). Outside DevHub or on
   any error, Neovim's own float. Set `vim.g.devhub_rich_floats = false` to
   keep Neovim's always.
-- **Go to definition with the pointer, as VS Code's Cmd-click.** In
-  DevHub's GUI, hold Option (Alt; `[editor] definition_modifier` in DevHub's
-  settings: `"alt"`, `"cmd"`, `"ctrl"` or `"off"`) over a symbol: when an
-  LSP client of the buffer has a definition for it, DevHub draws it as a
-  link — underlined, in `@markup.link`'s colour (else `Underlined`'s) — and
-  the pointer is a hand. A click with Option on it is the jump: the cursor
-  goes on the symbol and `vim.lsp.buf.definition()` runs, exactly as typed
-  there (the jumplist for `<C-o>`, the tag stack for `<C-t>`, several
-  results in the quickfix list, another file in the same window). The click
-  itself never reaches Neovim, so no cursor move or Visual drag comes first;
-  anywhere that is not such a symbol the click is Neovim's, unchanged (its
-  own `<A-LeftMouse>`: a blockwise Visual). `lua/devhub/definition.lua` does
-  Neovim's half, loaded at the first `LspAttach`: the screen cell to the
-  buffer by `screenpos()` (wrap, folds, inline virtual text, horizontal
-  scrolling; a concealed character is checked against what the screen shows
-  and is no link), the `iskeyword` word, one `textDocument/definition`
-  request at a time (the next word cancels it), answers kept by
-  `changedtick` and word. Nothing is asked while the modifier is up, and
-  nothing is put in the buffer: the link is DevHub's own drawing, gone in
-  the frame the key goes up. `vim.g.devhub_definition_links = false` turns
-  it off. The keyboard keeps `<C-]>` and your own mappings. To make the
-  click your own definition key's action (a picker's), name it:
+- **Go to definition with the pointer, as VS Code's Cmd-click**, as two
+  ordinary mappings. In DevHub's GUI, at the first `LspAttach`, devhub.nvim
+  maps in Normal and Insert mode, unless you mapped the key already:
+
+  ```lua
+  vim.keymap.set({ 'n', 'i' }, '<A-LeftMouse>', require('devhub.definition').click)
+  vim.keymap.set({ 'n', 'i' }, '<A-MouseMove>', require('devhub.definition').hover)
+  ```
+
+  `click()` takes the symbol under the mouse (`getmousepos()`); when an LSP
+  client of the buffer has a definition for it, the cursor goes on it and
+  `vim.lsp.buf.definition()` runs, exactly as typed there (the jumplist for
+  `<C-o>`, the tag stack, several results in the quickfix list, another
+  file in the same window), and the drag and release of that press are
+  dropped. Anywhere else the press is what Neovim does with it unmapped,
+  fed again without mappings: with Alt, a blockwise Visual start. An answer
+  still coming is waited for (`require('devhub.definition').click_wait_ms`,
+  500) so the press is one or the other.
+
+  `hover()` is for the moves DevHub sends while Ctrl, Alt or Cmd is held
+  (`<A-MouseMove>`; Neovim delivers them to mappings with or without
+  `'mousemoveevent'`): a symbol with a definition under the mouse is drawn
+  as a link with `gui.overlay` — underlined in `@markup.link`'s colour (else
+  `Underlined`'s), the hand over it, `held`, so DevHub takes it away in the
+  frame the modifier goes up. Any other key takes it away too (`vim.on_key`),
+  the plain `<MouseMove>` DevHub sends when the modifier goes up among them.
+  The screen cell is mapped to the buffer by `screenpos()` (wrap, folds,
+  inline virtual text, horizontal scrolling; a concealed character is checked
+  against what the screen shows and is no link), the word is `iskeyword`'s,
+  one `textDocument/definition` request at a time (the next word cancels
+  it), answers kept by `changedtick` and word. Nothing is put in the buffer.
+
+  Another modifier is your own mapping (`'<D-LeftMouse>'`, `'<D-MouseMove>'`
+  to the same functions); `vim.g.devhub_definition_links = false` before the
+  first `LspAttach` maps nothing (and makes both Neovim's). The keyboard
+  keeps `<C-]>` and your own mappings. To make the click your own
+  definition key's action (a picker's), name it:
   `setup { definition_jump = function(ctx) Snacks.picker.lsp_definitions() end }`
   — called with the cursor already on the symbol (so the jumplist still
   starts there); `ctx` is `{ buf, win, lnum, col }`.
@@ -433,6 +448,28 @@ being typed `gui.popup` answers `nil`; `gui.has_cmdline_popup()` says
 whether this DevHub takes `anchor = 'cmdline'` at all (an older one does
 not: draw your own there).
 
+### `gui.overlay`: a highlight over a window's cells
+
+```lua
+gui.overlay {
+  id = 'mine',                                -- the same id again replaces it
+  win = vim.api.nvim_get_current_win(),
+  spans = { { row = 4, col0 = 16, col1 = 20 } }, -- the window's grid cells, 0-based
+  hl = { fg = 0x3794ff, underline = true },  -- or a group's name
+  pointer = 'pointer',                        -- a CSS cursor over the cells
+  held = true,                                -- only while the modifiers held now are
+}
+gui.overlay { id = 'mine' }                   -- taken away
+```
+
+DevHub draws the highlight over the cells' own, the same way it draws
+Visual's band in a drag: nothing in the buffer, no redraw, there in the
+frame it comes. A redraw that rewrites its cells takes it away. `held` ties
+it to the modifier keys held when it comes, which Neovim never hears go up:
+DevHub takes it away in the frame they change. Of the moment, so not queued
+before DevHub attaches; outside DevHub it does nothing. The pointer's go to
+definition draws its link with it.
+
 ### `gui.document`: a rendered document beside a window
 
 ```lua
@@ -560,7 +597,7 @@ require('devhub').setup {
   auto = true,     -- wear the theme at startup when no colorscheme is chosen
   notify = false,  -- vim.notify drawn by DevHub (in its GUI), with LSP progress
   quick_pick = false, -- vim.ui.select / vim.ui.input as DevHub's quick pick (in its GUI)
-  definition_jump = nil, -- the modifier-click's jump, function(ctx), the cursor on the
+  definition_jump = nil, -- definition.click's jump, function(ctx), the cursor on the
                          -- symbol (in its GUI); nil: vim.lsp.buf.definition()
   follow = true,   -- follow User DevhubTheme and changes to the file
   on_apply = function(theme) end, -- your tweaks, after every apply: theme.colors
@@ -581,7 +618,8 @@ tests/run.sh   # nvim --headless: startup highlights are the theme file's
                # replaced file is followed; setup() outside DevHub is a no-op;
                # the component builders, the GUI facade over a stand-in for
                # DevHub; the pointer's go to definition against a fake
-               # language server (cell to word, caching, cancelling, the jump)
+               # language server, driven as DevHub drives it (nvim_input_mouse
+               # over RPC: the mappings, the link, its release, the jump)
 tests/fixtures/regenerate.sh <DevHub checkout>  # the fixtures, from DevHub's generator
 ```
 

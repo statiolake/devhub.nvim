@@ -1,16 +1,28 @@
--- Go to definition with the pointer, as VS Code's Cmd-click: DevHub's half
--- (docs/neovim-editor.md, "Go to definition with the pointer").
+-- Go to definition with the pointer, as VS Code's Cmd-hover and Cmd-click,
+-- as ordinary Neovim mappings (docs/neovim-editor.md in DevHub, "Go to
+-- definition with the pointer").
 --
--- While the person holds the modifier (`[editor] definition_modifier`,
--- Option/Alt by default) DevHub asks, for the cell under the pointer, whether
--- it is a symbol with a definition (`M.hover`); a symbol that has one is drawn
--- as a link by DevHub itself, over the cells this answers — nothing is put in
--- the buffer. A click with the modifier on it is `M.jump`: the cursor is put
--- on the symbol and `vim.lsp.buf.definition()` runs (or what
--- `require('devhub').setup { definition_jump = fn }` names), so it is the same jump
--- as `:lua vim.lsp.buf.definition()` from there — the jumplist (`<C-o>`), the
--- tag stack (`<C-t>`), several results in the quickfix list, another file in
--- the same window.
+--   * `M.click`, mapped to <A-LeftMouse>: the symbol under the mouse
+--     (`getmousepos()`) is a definition's, and the cursor is put on it and
+--     `vim.lsp.buf.definition()` runs (or `require('devhub').setup {
+--     definition_jump = fn }`'s), so it is the same jump as typed there:
+--     the jumplist (<C-o>), the tag stack, the quickfix list for several,
+--     another file in the same window. Anywhere else the press is what
+--     Neovim does with it unmapped (fed again, `noremap`): with Alt, a
+--     blockwise Visual start.
+--   * `M.hover`, mapped to <A-MouseMove>: while Alt is held DevHub sends the
+--     pointer's moves as mouse moves with it, and a symbol with a
+--     definition under it is drawn as a link (`gui.overlay`: underlined in
+--     `@markup.link`'s ink, the hand over it, `held` so it goes in the frame
+--     Alt goes up). Any other key — the plain <MouseMove> that says Alt went
+--     up among them — takes it away (`vim.on_key`).
+--
+-- Both are mapped in Normal and Insert mode, in DevHub's GUI, unless you
+-- mapped the key yourself (`M.map`); map others to them for another
+-- modifier (`<D-LeftMouse>`, `<D-MouseMove>`), or set
+-- `vim.g.devhub_definition_links = false` before the first LspAttach for
+-- none. Loaded at the first LspAttach in DevHub's GUI
+-- (`gui.hook_floats_on_lsp`).
 --
 -- Neovim's own: the screen cell is mapped to the buffer with `screenpos()`
 -- (wrap, folds, conceal, inline virtual text and horizontal scrolling as
@@ -19,12 +31,6 @@
 -- request at a time: a new word cancels the one in flight. Answers are kept
 -- by buffer `changedtick` and word, so going back and forth over a line asks
 -- each word once.
---
--- DevHub requires nothing of this module's presence: it asks
--- `package.loaded['devhub.definition']`, which devhub.nvim loads at the
--- first LspAttach in DevHub's GUI (`gui.hook_floats_on_lsp`). Without it (or
--- with `vim.g.devhub_definition_links = false`) the modifier's click is
--- Neovim's, as before.
 
 local M = {}
 
@@ -33,7 +39,7 @@ local METHOD = 'textDocument/definition'
 
 --- buf -> { tick = changedtick, words = { [key] = has_definition } }
 local cache = {}
---- The request in flight: { buf, key, at, seq, cancel, jump }.
+--- The request in flight: { buf, key, at, win, cancel, done, has, clicked }.
 local inflight
 
 --- How many requests were sent, for the tests.
@@ -96,10 +102,19 @@ function M.resolve(win, row, col)
   if not api.nvim_win_is_valid(win) then
     return nil
   end
+  local pos = api.nvim_win_get_position(win)
+  return M.resolve_screen(win, pos[1] + row + 1, pos[2] + col + 1)
+end
+
+--- The same for the screen's cell `R`, `C` (1-based, as `getmousepos()`'s
+--- screenrow and screencol) in window `win`.
+function M.resolve_screen(win, R, C)
+  if not api.nvim_win_is_valid(win) then
+    return nil
+  end
   local buf = api.nvim_win_get_buf(win)
   return api.nvim_win_call(win, function()
     local pos = api.nvim_win_get_position(win)
-    local R, C = pos[1] + row + 1, pos[2] + col + 1
     local info = vim.fn.getwininfo(win)[1]
     if not info then
       return nil
@@ -259,10 +274,52 @@ local function has_location(result)
   return result.uri ~= nil or result.targetUri ~= nil or #result > 0
 end
 
-local function tell(payload)
-  local core = package.loaded['devhub_gui']
-  if core and core._chan and core._event then
-    pcall(core._event, 'definition_link', payload)
+--- The overlay's id (`gui.overlay`).
+local ID = 'devhub.definition'
+--- How long a click waits for an answer still coming before it is
+--- Neovim's click after all.
+M.click_wait_ms = 500
+
+--- The link is drawn; the mouse is over windows with the modifier held.
+local shown, hovering = false, false
+--- The last key typed, as `vim.on_key` saw it before its mapping ran: the
+--- press a click falls back to.
+local last_typed
+--- The press that was a jump, while its drag and release are to be dropped.
+local swallow
+
+local function overlay(opts)
+  local gui = package.loaded['devhub.gui'] or require 'devhub.gui'
+  if gui.overlay then
+    pcall(gui.overlay, opts)
+  end
+end
+
+--- `@markup.link`'s ink, else `Underlined`'s, underlined.
+local function link_hl()
+  for _, name in ipairs { '@markup.link', 'Underlined' } do
+    local ok, hl = pcall(api.nvim_get_hl, 0, { name = name, link = false })
+    if ok and hl.fg then
+      return { fg = hl.fg, underline = true }
+    end
+  end
+  return { underline = true }
+end
+
+local function draw(win, at)
+  shown = true
+  local spans = {}
+  for _, s in ipairs(at.spans) do
+    table.insert(spans, { row = s.row, col0 = s.col0, col1 = s.col1 })
+  end
+  overlay { id = ID, win = win, spans = spans, hl = link_hl(), pointer = 'pointer', held = true }
+end
+M._draw = draw
+
+local function undraw()
+  if shown then
+    shown = false
+    overlay { id = ID }
   end
 end
 
@@ -302,11 +359,11 @@ function M.cancel()
   end
 end
 
-local function ask(win, at, seq)
+local function ask(win, at)
   M.cancel()
   local buf = at.buf
   local tick = api.nvim_buf_get_changedtick(buf)
-  local request = { buf = buf, key = at.key, at = at, seq = seq, win = win }
+  local request = { buf = buf, key = at.key, at = at, win = win }
   inflight = request
   M._sent = M._sent + 1
   request.cancel = vim.lsp.buf_request_all(buf, METHOD, function(client)
@@ -330,85 +387,164 @@ local function ask(win, at, seq)
     if api.nvim_buf_is_valid(buf) and (has or not failed) then
       remember(buf, tick, at.key, has)
     end
+    request.done, request.has = true, has
     if inflight ~= request then
       return
     end
     inflight = nil
-    tell { seq = request.seq, win = request.win, link = has, spans = at.spans }
-    if has and request.jump then
-      go(request.win, at)
+    if has and hovering and not request.clicked then
+      draw(request.win, at)
     end
   end)
   return request
 end
 
---- Whether window `win`'s cell is a symbol with a definition, for the link
---- DevHub draws while the modifier is held. Answers false when it is not a
---- keyword in a buffer with a definition provider (or not in Normal or
---- Insert mode): the modifier's click is then Neovim's. Else
---- { seq, spans, link = true | false }, or { seq, spans, pending = true }
---- and later the GUI event `definition_link` { seq, win, spans, link }.
-function M.hover(seq, win, row, col)
-  if not enabled() or not mode_ok() then
-    M.cancel()
-    return false
+--- The symbol under the mouse: (win, at), or nil when it is no word of a
+--- buffer with a definition provider.
+local function under_mouse()
+  local p = vim.fn.getmousepos()
+  if p.winid == 0 then
+    return nil
   end
-  local ok, at = pcall(M.resolve, win, row, col)
+  local ok, at = pcall(M.resolve_screen, p.winid, p.screenrow, p.screencol)
   if not ok or not at or #clients(at.buf) == 0 then
+    return nil
+  end
+  return p.winid, at
+end
+
+--- The link taken away; with `keep`, the request in flight is kept (a
+--- click is coming that wants its answer).
+function M.leave(keep)
+  hovering = false
+  undraw()
+  if not keep then
     M.cancel()
-    return false
+  end
+end
+
+--- <A-MouseMove>: the symbol under the mouse drawn as a link when it has a
+--- definition (at once when known, else when the answer comes).
+function M.hover()
+  if not enabled() or not mode_ok() then
+    return M.leave()
+  end
+  hovering = true
+  local win, at = under_mouse()
+  if not win then
+    M.cancel()
+    return undraw()
   end
   local known = cached(at.buf, at.key)
   if known ~= nil then
     M.cancel()
-    return { seq = seq, spans = at.spans, link = known }
+    if known then
+      return draw(win, at)
+    end
+    return undraw()
   end
   if inflight and inflight.buf == at.buf and inflight.key == at.key then
-    -- The same word, asked again: the answer goes to the newest ask.
-    inflight.seq = seq
     inflight.win = win
-    return { seq = seq, spans = at.spans, pending = true }
+    return
   end
-  ask(win, at, seq)
-  return { seq = seq, spans = at.spans, pending = true }
+  undraw()
+  ask(win, at)
 end
 
---- The modifier's click on window `win`'s cell: the jump, when it is a
---- symbol with a definition (at once when known, else when the answer
---- comes). Answers whether the click is taken (it is a symbol in a buffer
---- with a definition provider); DevHub has already decided whether it
---- passed the click to Neovim.
-function M.jump(win, row, col)
-  if not enabled() or not mode_ok() then
-    return false
+--- What Neovim does with the press unmapped: the key typed, fed again
+--- without mappings (Alt's: a blockwise Visual start), at the mouse
+--- position it has.
+local function neovims_click()
+  local key = last_typed
+  if not key or not vim.fn.keytrans(key):match 'Mouse>$' then
+    key = vim.keycode '<A-LeftMouse>'
   end
-  local ok, at = pcall(M.resolve, win, row, col)
-  if not ok or not at or #clients(at.buf) == 0 then
-    return false
+  api.nvim_feedkeys(key, 'n', false)
+end
+
+--- <A-LeftMouse>: the jump, when the symbol under the mouse has a
+--- definition; else Neovim's own click. An answer still coming is waited
+--- for (`M.click_wait_ms` at most), so the press is one or the other before
+--- the drag and the release that follow it are taken.
+function M.click()
+  if not enabled() or not mode_ok() then
+    return neovims_click()
+  end
+  local win, at = under_mouse()
+  if not win then
+    return neovims_click()
   end
   local known = cached(at.buf, at.key)
-  if known == true then
-    M.cancel()
-    go(win, at)
-    return true
+  if known == nil then
+    local request = inflight
+    if not (request and request.buf == at.buf and request.key == at.key) then
+      request = ask(win, at)
+    end
+    request.clicked = true
+    vim.wait(M.click_wait_ms, function()
+      return request.done == true
+    end, 5)
+    if not request.done then
+      M.cancel()
+    end
+    known = request.has == true
   end
-  if known == false then
-    return false
+  if not known then
+    return neovims_click()
   end
-  local request = inflight
-  if not (request and request.buf == at.buf and request.key == at.key) then
-    request = ask(win, at, 0)
+  M.leave()
+  -- The press was the jump: its drag and release are nothing (Neovim's own
+  -- would start a Visual from the symbol while the jump is on its way).
+  swallow = last_typed
+  go(win, at)
+end
+
+--- The defaults, in Normal and Insert mode, unless the key is mapped
+--- already: <A-LeftMouse> to `M.click`, <A-MouseMove> to `M.hover`.
+function M.map()
+  for _, mode in ipairs { 'n', 'i' } do
+    if vim.fn.maparg('<A-LeftMouse>', mode) == '' then
+      vim.keymap.set(mode, '<A-LeftMouse>', M.click, { desc = 'devhub: go to definition' })
+    end
+    if vim.fn.maparg('<A-MouseMove>', mode) == '' then
+      vim.keymap.set(mode, '<A-MouseMove>', M.hover, { desc = 'devhub: definition link' })
+    end
   end
-  request.jump = true
-  request.win = win
-  return true
 end
 
 --- Forget every answer kept (the tests; a server restarted).
 function M.clear()
-  M.cancel()
+  M.leave()
   cache = {}
 end
+
+-- Any key but a move with a modifier takes the link away: the plain
+-- <MouseMove> DevHub sends when the modifier goes up, a key typed, a
+-- click, the wheel. A press keeps the request (its click wants it).
+local ns = api.nvim_create_namespace 'devhub_definition'
+vim.on_key(function(key, typed)
+  local k = (typed and typed ~= '') and typed or key
+  if swallow then
+    local name = vim.fn.keytrans(k)
+    local button = name:match '(%a+)Drag>$' or name:match '(%a+)Release>$'
+    if button and vim.fn.keytrans(swallow):match(button .. 'Mouse>$') then
+      if name:match 'Release>$' then
+        swallow = nil
+      end
+      return ''
+    end
+    swallow = nil
+  end
+  last_typed = k
+  if not hovering then
+    return
+  end
+  local name = vim.fn.keytrans(k)
+  if name:match '^<[%a%-]+%-MouseMove>$' then
+    return
+  end
+  pcall(M.leave, name:match 'Mouse>$' ~= nil)
+end, ns)
 
 vim.api.nvim_create_autocmd({ 'LspDetach', 'BufWipeout' }, {
   group = vim.api.nvim_create_augroup('devhub_definition', { clear = true }),

@@ -1,309 +1,362 @@
 -- nvim --headless: the pointer's go to definition (lua/devhub/definition.lua)
--- against a fake language server: the screen cell to the word, the word to
--- `textDocument/definition`, the answers kept by changedtick and word, the
--- request in flight cancelled by the next word, and the jump.
+-- as DevHub drives it: a child Neovim (tests/definition_child.lua: a fake
+-- language server, a stand-in for DevHub's `devhub_gui` that records the
+-- overlays) is sent mouse input over RPC with nvim_input_mouse, so the
+-- <A-MouseMove> and <A-LeftMouse> mappings run as they do in DevHub's GUI.
 local failures = {}
 local function check(condition, message)
   if not condition then
     table.insert(failures, message)
-  end
-end
-
--- What DevHub would inject: the GUI events, recorded.
-local events = {}
-package.loaded['devhub_gui'] = {
-  _chan = 1,
-  _event = function(kind, payload)
-    if kind == 'definition_link' then
-      table.insert(events, payload)
+    if vim.env.DEBUG then
+      io.stderr:write('FAIL ' .. message .. '\n')
     end
-  end,
-}
-
--- A language server in this process: `alpha` (anywhere) is defined at line
--- 1, column 6; `twice` has two definitions; nothing else has one. Answers
--- come on the next tick, or after `delay` ms.
-local server = { requests = {}, cancelled = {}, delay = 0 }
-local function fake(dispatchers)
-  local closing = false
-  local id = 0
-  return {
-    request = function(method, params, callback)
-      id = id + 1
-      local this = id
-      if method == 'initialize' then
-        vim.schedule(function()
-          callback(nil, { capabilities = { definitionProvider = true, positionEncoding = 'utf-16' } })
-        end)
-        return true, this
-      end
-      if method == 'textDocument/definition' then
-        table.insert(server.requests, params)
-        local uri = params.textDocument.uri
-        local buf = vim.uri_to_bufnr(uri)
-        local line = vim.api.nvim_buf_get_lines(buf, params.position.line, params.position.line + 1, false)[1] or ''
-        local word = line:sub(params.position.character + 1):match '^[%w_]+'
-        local result = nil
-        if word == 'alpha' then
-          result = { uri = uri, range = { start = { line = 0, character = 6 }, ['end'] = { line = 0, character = 11 } } }
-        elseif word == 'twice' then
-          result = {
-            { uri = uri, range = { start = { line = 0, character = 0 }, ['end'] = { line = 0, character = 5 } } },
-            { uri = uri, range = { start = { line = 1, character = 0 }, ['end'] = { line = 1, character = 5 } } },
-          }
-        end
-        local function answer()
-          if server.cancelled[this] then
-            callback({ code = -32800, message = 'cancelled' }, nil)
-          else
-            callback(nil, result)
-          end
-        end
-        if server.delay > 0 then
-          vim.defer_fn(answer, server.delay)
-        else
-          vim.schedule(answer)
-        end
-        return true, this
-      end
-      vim.schedule(function()
-        callback(nil, nil)
-      end)
-      return true, this
-    end,
-    notify = function(method, params)
-      if method == '$/cancelRequest' then
-        server.cancelled[params.id] = true
-      end
-      return true
-    end,
-    is_closing = function()
-      return closing
-    end,
-    terminate = function()
-      closing = true
-    end,
-  }
-end
-
-local def = require 'devhub.definition'
-
-vim.o.columns = 40
-vim.o.lines = 20
-vim.wo.number = false
-vim.wo.signcolumn = 'no'
-vim.wo.wrap = true
-local buf = vim.api.nvim_get_current_buf()
-vim.api.nvim_buf_set_name(buf, vim.fn.tempname() .. '.lua')
-vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
-  'local alpha = 1', -- 1
-  'print(alpha)', -- 2
-  'print(twice, beta)', -- 3
-  string.rep('x', 36) .. ' alpha', -- 4: alpha wraps onto the next row
-  'folded alpha', -- 5
-  'folded too', -- 6
-  'after alpha', -- 7
-})
-local win = vim.api.nvim_get_current_win()
--- What the screen shows is checked against the buffer (conceal): drawn.
-vim.cmd 'redraw'
-
-local function wait_for(fn, what)
-  if not vim.wait(1000, fn, 5) then
-    table.insert(failures, 'timed out: ' .. what)
-    return false
   end
-  return true
 end
 
--- No client yet: the modifier's click is Neovim's.
-check(def.hover(1, win, 1, 7) == false, 'no client: false')
+local root = vim.fn.getcwd()
+local ch = vim.fn.jobstart({
+  vim.v.progpath,
+  '--embed',
+  '--headless',
+  '--clean',
+  '--cmd',
+  'set rtp^=' .. root,
+  '-c',
+  'luafile ' .. root .. '/tests/definition_child.lua',
+}, { rpc = true })
+local function R(method, ...)
+  local value = vim.rpcrequest(ch, method, ...)
+  if value == vim.NIL then
+    return nil
+  end
+  return value
+end
+--- Lua in the child.
+local function lua(code, ...)
+  return R('nvim_exec_lua', code, { ... })
+end
+-- Grid 0 is the screen; the window is at its top left, so a screen cell is
+-- the window's.
+local function move(mods, row, col)
+  R('nvim_input_mouse', 'move', '', mods, 0, row, col)
+end
+local function click(mods, row, col)
+  R('nvim_input_mouse', 'left', 'press', mods, 0, row, col)
+  R('nvim_input_mouse', 'left', 'release', mods, 0, row, col)
+end
+local function wait_for(fn, what)
+  -- The input is taken in between the requests: ask again until it is.
+  local ok = vim.wait(1500, function()
+    return fn()
+  end, 10)
+  check(ok, 'timed out: ' .. what)
+  return ok
+end
+--- Let the input be taken (and an answer come) when nothing should happen.
+local function settle(ms)
+  vim.wait(ms or 60)
+  R('nvim_get_mode')
+end
+local function overlays()
+  return lua 'return OVERLAYS'
+end
+local function last()
+  local o = overlays()
+  return o[#o]
+end
+local function reset()
+  lua 'OVERLAYS = {}'
+end
+local function requests()
+  return lua 'return #SERVER.requests'
+end
+local function cursor()
+  return lua 'return vim.api.nvim_win_get_cursor(WIN)'
+end
+local function mode()
+  return R('nvim_get_mode').mode
+end
+local function drawn(o, row, col0, col1)
+  return o
+    and o.id == 'devhub.definition'
+    and o.win == lua 'return WIN'
+    and o.spans
+    and o.spans[1]
+    and o.spans[1].row == row
+    and o.spans[1].col0 == col0
+    and o.spans[1].col1 == col1
+end
 
-local client = vim.lsp.start { name = 'fake', cmd = fake, root_dir = vim.fn.getcwd() }
+-- 0. The defaults, Normal and Insert mode.
+for _, m in ipairs { 'n', 'i' } do
+  check(lua('return vim.fn.maparg("<A-LeftMouse>", ...)', m) ~= '', '<A-LeftMouse> mapped in ' .. m)
+  check(lua('return vim.fn.maparg("<A-MouseMove>", ...)', m) ~= '', '<A-MouseMove> mapped in ' .. m)
+end
+check(lua 'return vim.fn.maparg("<A-LeftMouse>", "v")' == '', 'not in Visual')
+
+-- 1. No client yet: nothing drawn, and the click is Neovim's (Alt's: a
+-- blockwise Visual start at the click).
+move('A', 1, 7)
+settle()
+check(#overlays() == 0, 'no client: nothing drawn')
+click('A', 1, 7)
 wait_for(function()
-  return #vim.lsp.get_clients { bufnr = buf, method = 'textDocument/definition' } > 0
+  return mode() == '\22'
+end, 'no client: Neovim\'s Alt-click, a blockwise Visual')
+R('nvim_input', '<Esc>')
+settle()
+
+lua [[CLIENT = vim.lsp.start { name = 'fake', cmd = FAKE, root_dir = vim.fn.getcwd() }]]
+wait_for(function()
+  return lua [[return #vim.lsp.get_clients { bufnr = BUF, method = 'textDocument/definition' } > 0]]
 end, 'the fake client attaches')
 
--- 1. The cell to the word: row 1 (line 2), col 7 is in `alpha` (cols 6-10).
-local at = def.resolve(win, 1, 7)
-check(at and at.lnum == 2 and at.s == 7 and at.e == 11, 'resolve: line 2, bytes 7-11')
-check(at and #at.spans == 1 and at.spans[1].row == 1 and at.spans[1].col0 == 6 and at.spans[1].col1 == 10, 'resolve: its cells')
-check(def.resolve(win, 1, 5) == nil, 'a parenthesis is no word')
-check(def.resolve(win, 1, 30) == nil, 'past the line: nothing')
-check(def.resolve(win, 15, 0) == nil, 'past the buffer: nothing')
-
--- 2. A symbol with a definition: asked, then told.
-local answer = def.hover(1, win, 1, 7)
-check(type(answer) == 'table' and answer.pending == true and answer.seq == 1, 'first ask is pending')
-wait_for(function()
-  return #events == 1
-end, 'the definition_link event')
-check(events[1] and events[1].seq == 1 and events[1].link == true and events[1].win == win, 'told: a link')
-check(events[1] and events[1].spans[1].col0 == 6, 'told with its cells')
-check(#server.requests == 1, 'one request')
-check(server.requests[1] and server.requests[1].position.line == 1 and server.requests[1].position.character == 6, 'asked at the word')
-
--- 3. Asked again, anywhere on the word: kept, no request.
-answer = def.hover(2, win, 1, 10)
-check(type(answer) == 'table' and answer.link == true and answer.seq == 2 and not answer.pending, 'kept: a link at once')
-check(#server.requests == 1, 'no second request for the same word')
-
--- 4. A word with no definition.
-events = {}
-answer = def.hover(3, win, 1, 2)
-check(answer and answer.pending, '`print` is asked')
-wait_for(function()
-  return #events == 1
-end, 'print answered')
-check(events[1] and events[1].link == false, '`print` has no definition')
-answer = def.hover(4, win, 1, 0)
-check(answer and answer.link == false and not answer.pending, 'kept: no definition')
-
--- 5. The next word cancels the request in flight; only the newest is told.
-events = {}
-server.delay = 60
-local before = #server.requests
-def.hover(5, win, 2, 7) -- `twice`
-def.hover(6, win, 2, 14) -- `beta`
-check(#server.requests == before + 2, 'each word asked')
-wait_for(function()
-  return #events >= 1
-end, 'the newest answered')
-vim.wait(150)
-check(#events == 1 and events[1].seq == 6 and events[1].link == false, 'only the newest ask is told')
-local cancels = 0
-for _ in pairs(server.cancelled) do
-  cancels = cancels + 1
+-- 2. The cell to the word, by the screen: the old checks of resolve().
+local resolve_failures = lua('return dofile(...)', root .. '/tests/definition_resolve.lua')
+for _, f in ipairs(resolve_failures) do
+  table.insert(failures, 'resolve: ' .. f)
 end
-check(cancels >= 1, 'the stale request cancelled')
--- Its answer was not kept either (it was cancelled): asked again.
-events = {}
-answer = def.hover(7, win, 2, 7)
-check(answer and answer.pending, 'a cancelled word is asked again')
+
+-- 3. Alt held over `alpha` (line 2, cols 6-10): asked, then drawn as a link.
+reset()
+-- Not 1, 7: Neovim drops a move to the cell of its last mouse event (the
+-- click above), whatever the modifiers.
+move('A', 1, 8)
 wait_for(function()
-  return #events == 1
-end, 'twice answered')
-check(events[1] and events[1].link == true, '`twice` has definitions')
-server.delay = 0
+  return drawn(last(), 1, 6, 10)
+end, 'the link over alpha')
+local o = last()
+check(o and o.pointer == 'pointer' and o.held == true, 'the hand, and held')
+check(o and o.hl and o.hl.underline == true, 'underlined')
+check(requests() == 1, 'one request')
+local req = lua 'return SERVER.requests[1]'
+check(req and req.position.line == 1 and req.position.character == 6, 'asked at the word')
 
--- 6. An edit: the answers are asked again.
-before = #server.requests
-vim.api.nvim_buf_set_lines(buf, 7, 7, false, { '' })
-answer = def.hover(8, win, 1, 7)
-check(answer and answer.pending, 'a new changedtick asks again')
+-- 4. Along the same word: no new request.
+move('A', 1, 9)
+settle()
+check(requests() == 1, 'no second request for the same word')
+check(drawn(last(), 1, 6, 10), 'still the link')
+
+-- 5. Alt up: DevHub sends a plain move (or feeds <MouseMove> at the same
+-- cell): the link taken away.
+reset()
+move('', 1, 8)
 wait_for(function()
-  return #server.requests == before + 1
-end, 'asked after the edit')
-vim.api.nvim_buf_set_lines(buf, 7, 8, false, {})
-vim.wait(50)
-
--- 7. Wrap: `alpha` on line 4 starts at col 37 and wraps onto row 4.
-at = def.resolve(win, 4, 1)
-check(at and at.lnum == 4 and at.s == 38, 'wrapped: the second row is the same word')
-check(at and #at.spans == 2 and at.spans[1].row == 3 and at.spans[1].col0 == 37 and at.spans[2].row == 4 and at.spans[2].col0 == 0, 'wrapped: a span per row, got ' .. vim.inspect(at and at.spans))
--- Concealed characters before the word move its cells.
-vim.api.nvim_win_set_cursor(win, { 1, 0 })
-vim.cmd [[syntax match Hidden /xxxxx/ conceal]]
-vim.wo.conceallevel = 3
-vim.cmd 'redraw'
--- screenpos() puts `alpha` where it would be unconcealed: the screen shows
--- other cells there, so it is no link; and what is drawn there is not taken
--- for the concealed `x`s either.
-check(def.resolve(win, 4, 1) == nil, 'concealed: no link where the screen shows something else')
-check(def.resolve(win, 3, 0) == nil or def.resolve(win, 3, 0).s ~= 1, 'concealed text is no word')
-vim.wo.conceallevel = 0
-vim.cmd 'syntax clear Hidden'
-vim.cmd 'redraw'
-
--- 8. A closed fold is no symbol; the lines after it are where they are.
-vim.wo.foldmethod = 'manual'
-vim.cmd '5,6fold'
-vim.cmd 'redraw'
-check(def.resolve(win, 5, 7) == nil, 'a closed fold: nothing')
-at = def.resolve(win, 6, 7)
-check(at and at.lnum == 7 and at.s == 7, 'after the fold: line 7')
-vim.cmd 'normal! zE'
-vim.cmd 'redraw'
-
--- 9. Inline virtual text: its cells are no word; the word after it moves.
-local ns = vim.api.nvim_create_namespace 'spec'
-vim.api.nvim_buf_set_extmark(buf, ns, 1, 6, { virt_text = { { 'HINT', 'Comment' } }, virt_text_pos = 'inline' })
-vim.cmd 'redraw'
-check(def.resolve(win, 1, 7) == nil, 'inline virtual text is no word')
-at = def.resolve(win, 1, 11)
-check(at and at.s == 7 and at.spans[1].col0 == 10, 'the word after inline virtual text')
-vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-vim.cmd 'redraw'
-
--- 10. Visual mode: Neovim's click.
-vim.cmd 'normal! v'
-check(def.hover(9, win, 1, 7) == false, 'Visual: false')
-vim.cmd 'normal! \27'
-
--- 11. The jump: as vim.lsp.buf.definition from the word, with the jumplist.
-vim.api.nvim_win_set_cursor(win, { 3, 0 })
-check(def.jump(win, 1, 7) == true, 'jump taken')
+  local l = last()
+  return l and l.id == 'devhub.definition' and l.win == nil
+end, 'a plain move takes the link away')
+move('A', 1, 7)
 wait_for(function()
-  local c = vim.api.nvim_win_get_cursor(win)
+  return drawn(last(), 1, 6, 10)
+end, 'drawn again, from what is kept')
+check(requests() == 1, 'kept: no request')
+reset()
+lua [[vim.api.nvim_feedkeys(vim.keycode('<MouseMove>'), 'mt', false)]]
+wait_for(function()
+  local l = last()
+  return l and l.win == nil
+end, 'a <MouseMove> fed at the same cell takes it away too')
+-- And Alt down again with the pointer still: the fed <A-MouseMove>.
+reset()
+lua [[vim.api.nvim_feedkeys(vim.keycode('<A-MouseMove>'), 'mt', false)]]
+wait_for(function()
+  return drawn(last(), 1, 6, 10)
+end, 'a fed <A-MouseMove> at the same cell draws it')
+-- Any other key takes it away.
+reset()
+R('nvim_input', '<Ignore>l')
+wait_for(function()
+  local l = last()
+  return l and l.win == nil
+end, 'a key takes it away')
+R('nvim_input', 'h')
+
+-- 6. A word with no definition: the link goes, nothing drawn.
+reset()
+move('A', 1, 9)
+wait_for(function()
+  return drawn(last(), 1, 6, 10)
+end, 'the link again')
+move('A', 1, 2) -- `print`
+wait_for(function()
+  return requests() == 2
+end, '`print` asked')
+settle()
+local l = last()
+check(l and l.win == nil, 'off the link: taken away')
+move('A', 1, 0)
+settle()
+check(requests() == 2, 'kept: no definition, not asked again')
+
+-- 7. The next word cancels the request in flight; only the newest is drawn.
+lua 'SERVER.delay = 80'
+reset()
+move('A', 2, 7) -- `twice`
+settle(10)
+move('A', 2, 14) -- `beta`
+settle(250)
+for _, x in ipairs(overlays()) do
+  check(x.win == nil, 'the cancelled word is not drawn')
+end
+check(lua 'local n = 0 for _ in pairs(SERVER.cancelled) do n = n + 1 end return n' >= 1, 'the stale request cancelled')
+lua 'SERVER.delay = 0'
+
+-- 8. An edit: asked again.
+local before = requests()
+lua [[vim.api.nvim_buf_set_lines(BUF, 7, 7, false, { '' })]]
+move('A', 1, 8)
+wait_for(function()
+  return requests() == before + 1
+end, 'a new changedtick asks again')
+lua [[vim.api.nvim_buf_set_lines(BUF, 7, 8, false, {})]]
+move('A', 1, 7)
+settle()
+
+-- 9. Visual mode: nothing drawn (the mapping lets it be).
+R('nvim_input', 'v')
+settle()
+reset()
+move('A', 1, 9)
+settle()
+check(#overlays() == 0 or last().win == nil, 'Visual: no link')
+R('nvim_input', '<Esc>')
+settle()
+
+-- 10. Alt-click on the link: the jump, as vim.lsp.buf.definition from the
+-- word, with the jumplist; the drag and the release after it are nothing.
+lua 'vim.api.nvim_win_set_cursor(WIN, { 3, 0 })'
+move('A', 1, 7)
+settle()
+R('nvim_input_mouse', 'left', 'press', 'A', 0, 1, 7)
+R('nvim_input_mouse', 'left', 'drag', 'A', 0, 2, 3)
+R('nvim_input_mouse', 'left', 'release', 'A', 0, 2, 3)
+wait_for(function()
+  local c = cursor()
   return c[1] == 1 and c[2] == 6
 end, 'the cursor at the definition')
-vim.cmd 'normal! \15' -- <C-o>
-local c = vim.api.nvim_win_get_cursor(win)
+settle()
+local c = cursor()
+check(c[1] == 1 and c[2] == 6 and mode() == 'n', 'no Visual from the drag after the jump, got ' .. vim.inspect(c) .. ' ' .. mode())
+R('nvim_input', '<C-o>')
+settle()
+c = cursor()
 check(c[1] == 2 and c[2] == 6, '<C-o> back to the clicked word, got ' .. vim.inspect(c))
--- Several definitions: the quickfix list, as vim.lsp.buf.definition.
-def.jump(win, 2, 7)
+
+-- 11. Several definitions: the quickfix list.
+click('A', 2, 7)
 wait_for(function()
-  return #vim.fn.getqflist() == 2
+  return #lua 'return vim.fn.getqflist()' == 2
 end, 'two definitions in the quickfix list')
-vim.cmd 'cclose'
-vim.api.nvim_set_current_win(win)
--- No definition: nothing taken, the cursor kept.
-vim.api.nvim_win_set_cursor(win, { 3, 0 })
-def.jump(win, 1, 2) -- `print`, not known since the edit: asked
-vim.wait(50)
-c = vim.api.nvim_win_get_cursor(win)
-check(c[1] == 3 and c[2] == 0, 'no definition: the cursor kept')
-check(def.jump(win, 1, 2) == false, 'known to have no definition: not taken')
--- A jump asked before the hover's answer: made when it comes.
-def.clear()
-vim.api.nvim_win_set_cursor(win, { 3, 0 })
-check(def.jump(win, 1, 8) == true, 'a jump before the answer is taken')
+lua 'vim.cmd "cclose" vim.api.nvim_set_current_win(WIN)'
+
+-- 12. No definition, or no word: Neovim's click (a blockwise Visual there).
+lua 'vim.api.nvim_win_set_cursor(WIN, { 3, 0 })'
+click('A', 1, 2) -- `print`
 wait_for(function()
-  local cur = vim.api.nvim_win_get_cursor(win)
+  return mode() == '\22'
+end, 'no definition: a blockwise Visual')
+c = cursor()
+check(c[1] == 2 and c[2] == 2, 'at the click, got ' .. vim.inspect(c))
+R('nvim_input', '<Esc>')
+settle()
+click('A', 1, 5) -- `(`
+wait_for(function()
+  return mode() == '\22'
+end, 'not a word: a blockwise Visual')
+R('nvim_input', '<Esc>')
+settle()
+
+-- 13. A click before the answer: waited for, then the jump.
+lua 'require("devhub.definition").clear() SERVER.delay = 60'
+lua 'vim.api.nvim_win_set_cursor(WIN, { 3, 0 })'
+click('A', 1, 8)
+wait_for(function()
+  local cur = cursor()
   return cur[1] == 1 and cur[2] == 6
 end, 'jumped when the answer came')
+lua 'SERVER.delay = 0'
 
--- 12. setup{ definition_jump }: called with the cursor on the symbol,
--- instead of vim.lsp.buf.definition (no request, the cursor stays there).
-local seen
-local devhub = require 'devhub'
-devhub.config.definition_jump = function(ctx)
-  seen = { ctx = ctx, cursor = vim.api.nvim_win_get_cursor(0) }
+-- 14. setup{ definition_jump }: called with the cursor on the symbol,
+-- instead of vim.lsp.buf.definition (no jump, the cursor stays there).
+lua [[
+SEEN = nil
+require('devhub').config.definition_jump = function(ctx)
+  SEEN = { ctx = ctx, cursor = vim.api.nvim_win_get_cursor(0) }
 end
-before = #server.requests
-vim.api.nvim_win_set_cursor(win, { 3, 0 })
-check(def.jump(win, 1, 8) == true, 'a custom jump is taken')
+vim.api.nvim_win_set_cursor(WIN, { 3, 0 })
+]]
+click('A', 1, 9)
 wait_for(function()
-  return seen ~= nil
+  return lua 'return SEEN ~= nil'
 end, 'the custom jump called')
-check(seen and seen.ctx.buf == buf and seen.ctx.win == win and seen.ctx.lnum == 2 and seen.ctx.col == 6, 'ctx: buf, win, lnum, col, got ' .. vim.inspect(seen and seen.ctx))
+local seen = lua 'return SEEN'
+check(seen and seen.ctx.lnum == 2 and seen.ctx.col == 6 and seen.ctx.win == lua 'return WIN' and seen.ctx.buf == lua 'return BUF', 'ctx: buf, win, lnum, col, got ' .. vim.inspect(seen and seen.ctx))
 check(seen and seen.cursor[1] == 2 and seen.cursor[2] == 6, 'called with the cursor on the symbol')
-vim.wait(50)
-local c2 = vim.api.nvim_win_get_cursor(win)
-check(c2[1] == 2 and c2[2] == 6, 'vim.lsp.buf.definition not run as well')
--- An error in it is said, not raised into DevHub's call.
-devhub.config.definition_jump = function()
-  error 'boom'
-end
-check(pcall(def.jump, win, 1, 8), 'a failing custom jump does not raise')
-devhub.config.definition_jump = nil
+settle()
+c = cursor()
+check(c[1] == 2 and c[2] == 6, 'vim.lsp.buf.definition not run as well')
+-- An error in it is said, not raised.
+lua [[require('devhub').config.definition_jump = function() error 'boom' end]]
+click('A', 1, 10)
+settle()
+check(mode() == 'n', 'a failing custom jump leaves Neovim as it was')
+lua [[require('devhub').config.definition_jump = nil]]
 
--- 13. Turned off: Neovim's click.
-vim.g.devhub_definition_links = false
-check(def.hover(10, win, 1, 7) == false, 'turned off: false')
-vim.g.devhub_definition_links = nil
+-- 15. Insert mode: the link and the jump too.
+lua 'vim.api.nvim_win_set_cursor(WIN, { 3, 0 })'
+R('nvim_input', 'i')
+settle()
+reset()
+move('A', 1, 9)
+wait_for(function()
+  return drawn(last(), 1, 6, 10)
+end, 'Insert: the link')
+click('A', 1, 9)
+wait_for(function()
+  local cur = cursor()
+  return cur[1] == 1 and cur[2] == 6
+end, 'Insert: the jump')
+R('nvim_input', '<Esc>')
+settle()
 
-vim.lsp.get_client_by_id(client):stop(true)
+-- 16. Turned off: nothing drawn, Neovim's click.
+lua 'vim.g.devhub_definition_links = false'
+reset()
+move('A', 1, 8)
+settle()
+check(#overlays() == 0 or last().win == nil, 'turned off: no link')
+click('A', 1, 8)
+wait_for(function()
+  return mode() == '\22'
+end, 'turned off: Neovim\'s click')
+R('nvim_input', '<Esc>')
+settle()
+lua 'vim.g.devhub_definition_links = nil'
+
+-- 17. Your own mapping is kept; and yours can be another modifier's.
+lua [[
+vim.keymap.del('n', '<A-LeftMouse>')
+vim.keymap.set('n', '<A-LeftMouse>', function() MINE = true end, { desc = 'mine' })
+require('devhub.definition').map()
+vim.keymap.set('n', '<D-LeftMouse>', require('devhub.definition').click)
+vim.keymap.set('n', '<D-MouseMove>', require('devhub.definition').hover)
+vim.api.nvim_win_set_cursor(WIN, { 3, 0 })
+]]
+check(lua 'return vim.fn.maparg("<A-LeftMouse>", "n", false, true).desc' == 'mine', 'a mapping of yours is kept')
+reset()
+move('D', 1, 7)
+wait_for(function()
+  return drawn(last(), 1, 6, 10)
+end, '<D-MouseMove>: the link')
+click('D', 1, 7)
+wait_for(function()
+  local cur = cursor()
+  return cur[1] == 1 and cur[2] == 6
+end, '<D-LeftMouse>: the jump')
+
+lua 'vim.lsp.get_client_by_id(CLIENT):stop(true)'
+vim.fn.jobstop(ch)
 
 if #failures > 0 then
   error(table.concat(failures, '\n  '), 0)

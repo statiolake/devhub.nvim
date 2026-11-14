@@ -886,6 +886,25 @@ end
 
 local hooked = false
 
+--- A highlight DevHub draws over a window's cells, over their own and with
+--- no redraw: the same overrides as Visual's band in a drag, so it is
+--- instant and costs the buffer nothing.
+--- opts: { id, win, spans = { { row =, col0 =, col1 = }, ... } (the
+---   window's grid cells, 0-based, inclusive), hl = group name or
+---   nvim_get_hl()'s attributes (fg, bg, sp, underline, bold, ...),
+---   pointer = a CSS cursor over the cells ('pointer': the hand),
+---   held = true: drawn only while the modifier keys held when it comes stay
+---   held (gone in the frame they go up, which Neovim never hears) }.
+--- The same id again replaces it; { id = id } alone takes it away. A
+--- redraw that rewrites its cells takes it away too. Nothing outside
+--- DevHub, or before it attaches (it is not queued: it is of the moment).
+function M.overlay(opts)
+  local c = core()
+  if c and c.overlay then
+    return c.overlay(opts)
+  end
+end
+
 --- hook_floats() at the first LspAttach: vim.lsp stays unloaded until then.
 function M.hook_floats_on_lsp()
   vim.api.nvim_create_autocmd('LspAttach', {
@@ -893,10 +912,10 @@ function M.hook_floats_on_lsp()
     once = true,
     callback = function()
       M.hook_floats()
-      -- The pointer's go to definition (lua/devhub/definition.lua): DevHub
-      -- asks it while the modifier is held.
+      -- The pointer's go to definition (lua/devhub/definition.lua):
+      -- <A-LeftMouse> and <A-MouseMove>, unless you mapped them.
       if vim.g.devhub_definition_links ~= false then
-        require 'devhub.definition'
+        require('devhub.definition').map()
       end
     end,
   })
