@@ -30,6 +30,12 @@ M.config = {
   -- In DevHub's GUI, vim.ui.select and vim.ui.input drawn as DevHub's quick
   -- pick (DevHub's docs/native-picker.md). Off until it has been tried.
   quick_pick = false,
+  -- In DevHub's GUI, what the modifier-click on a symbol runs, with the
+  -- cursor already on it: function(ctx) with ctx = { buf, win, lnum, col }
+  -- (lnum 1-based, col 0-based, as nvim_win_get_cursor). nil:
+  -- vim.lsp.buf.definition(). Set it to what your own definition key runs
+  -- (a picker's), so the click and the key are one action.
+  definition_jump = nil,
   -- Run after the highlights are set, with the theme: for your own tweaks.
   on_apply = nil,
 }

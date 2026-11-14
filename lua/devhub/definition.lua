@@ -6,7 +6,8 @@
 -- it is a symbol with a definition (`M.hover`); a symbol that has one is drawn
 -- as a link by DevHub itself, over the cells this answers — nothing is put in
 -- the buffer. A click with the modifier on it is `M.jump`: the cursor is put
--- on the symbol and `vim.lsp.buf.definition()` runs, so it is the same jump
+-- on the symbol and `vim.lsp.buf.definition()` runs (or what
+-- `require('devhub').setup { definition_jump = fn }` names), so it is the same jump
 -- as `:lua vim.lsp.buf.definition()` from there — the jumplist (`<C-o>`), the
 -- tag stack (`<C-t>`), several results in the quickfix list, another file in
 -- the same window.
@@ -276,8 +277,18 @@ local function go(win, at)
     api.nvim_set_current_win(win)
   end
   -- The cursor on the symbol, as a click there would put it, and then the
-  -- jump `vim.lsp.buf.definition()` makes from there.
+  -- jump from there: setup{ definition_jump } (your definition key's
+  -- action), else `vim.lsp.buf.definition()`.
   api.nvim_win_set_cursor(win, { at.lnum, at.s - 1 })
+  local devhub = package.loaded['devhub']
+  local jump = devhub and devhub.config and devhub.config.definition_jump
+  if type(jump) == 'function' then
+    local ok, err = pcall(jump, { buf = at.buf, win = win, lnum = at.lnum, col = at.s - 1 })
+    if not ok then
+      vim.notify('devhub: definition_jump: ' .. tostring(err), vim.log.levels.WARN)
+    end
+    return
+  end
   vim.lsp.buf.definition()
 end
 M._go = go

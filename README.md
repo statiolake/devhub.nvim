@@ -146,7 +146,11 @@ end
   `changedtick` and word. Nothing is asked while the modifier is up, and
   nothing is put in the buffer: the link is DevHub's own drawing, gone in
   the frame the key goes up. `vim.g.devhub_definition_links = false` turns
-  it off. The keyboard keeps `<C-]>` and your own mappings.
+  it off. The keyboard keeps `<C-]>` and your own mappings. To make the
+  click your own definition key's action (a picker's), name it:
+  `setup { definition_jump = function(ctx) Snacks.picker.lsp_definitions() end }`
+  — called with the cursor already on the symbol (so the jumplist still
+  starts there); `ctx` is `{ buf, win, lnum, col }`.
 - `:DevhubImageDemo [path]` and `:DevhubGuiDemo` come from DevHub. There
   is no DevHub terminal inside Neovim: the Workspace's terminal is DevHub's
   editor area itself, and Neovim's own `:terminal` is drawn as usual.
@@ -556,6 +560,8 @@ require('devhub').setup {
   auto = true,     -- wear the theme at startup when no colorscheme is chosen
   notify = false,  -- vim.notify drawn by DevHub (in its GUI), with LSP progress
   quick_pick = false, -- vim.ui.select / vim.ui.input as DevHub's quick pick (in its GUI)
+  definition_jump = nil, -- the modifier-click's jump, function(ctx), the cursor on the
+                         -- symbol (in its GUI); nil: vim.lsp.buf.definition()
   follow = true,   -- follow User DevhubTheme and changes to the file
   on_apply = function(theme) end, -- your tweaks, after every apply: theme.colors
                                   -- (background, foreground, ansi[1..16], …), theme.neovim

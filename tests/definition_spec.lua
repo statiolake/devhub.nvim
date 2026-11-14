@@ -273,7 +273,32 @@ wait_for(function()
   return cur[1] == 1 and cur[2] == 6
 end, 'jumped when the answer came')
 
--- 12. Turned off: Neovim's click.
+-- 12. setup{ definition_jump }: called with the cursor on the symbol,
+-- instead of vim.lsp.buf.definition (no request, the cursor stays there).
+local seen
+local devhub = require 'devhub'
+devhub.config.definition_jump = function(ctx)
+  seen = { ctx = ctx, cursor = vim.api.nvim_win_get_cursor(0) }
+end
+before = #server.requests
+vim.api.nvim_win_set_cursor(win, { 3, 0 })
+check(def.jump(win, 1, 8) == true, 'a custom jump is taken')
+wait_for(function()
+  return seen ~= nil
+end, 'the custom jump called')
+check(seen and seen.ctx.buf == buf and seen.ctx.win == win and seen.ctx.lnum == 2 and seen.ctx.col == 6, 'ctx: buf, win, lnum, col, got ' .. vim.inspect(seen and seen.ctx))
+check(seen and seen.cursor[1] == 2 and seen.cursor[2] == 6, 'called with the cursor on the symbol')
+vim.wait(50)
+local c2 = vim.api.nvim_win_get_cursor(win)
+check(c2[1] == 2 and c2[2] == 6, 'vim.lsp.buf.definition not run as well')
+-- An error in it is said, not raised into DevHub's call.
+devhub.config.definition_jump = function()
+  error 'boom'
+end
+check(pcall(def.jump, win, 1, 8), 'a failing custom jump does not raise')
+devhub.config.definition_jump = nil
+
+-- 13. Turned off: Neovim's click.
 vim.g.devhub_definition_links = false
 check(def.hover(10, win, 1, 7) == false, 'turned off: false')
 vim.g.devhub_definition_links = nil
