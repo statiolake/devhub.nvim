@@ -470,6 +470,15 @@ end
 ---                   file opens in the window the document was opened from)
 ---   opts.scroll     { line = n }: the source line to start at the top
 ---   opts.on_close   fn(handle): it closed (q, :close, its buffer wiped)
+---   opts.on_view    fn(handle, view): the person scrolled it (a key in its
+---                   window, the wheel, a heading link), view = { top,
+---                   bottom }, the source lines in sight, frame by frame;
+---                   never a scroll it made to follow :scroll_to or its own
+---                   window, so a source that follows it does not loop
+---   opts.on_source_click  fn(handle, pos): an Alt-click on the drawing,
+---                   pos = { line, col? } (col: a byte column, 1-based, when
+---                   the text clicked tells it); default: its own window's
+---                   cursor goes there
 --- A URL opens in the browser; a #heading scrolls the document. Its
 --- window's keys: j/k, <C-d>/<C-u>, <C-f>/<C-b>, gg/G scroll; <Tab>/<S-Tab>
 --- move between links, <CR> follows one; <Esc> goes back; q closes.

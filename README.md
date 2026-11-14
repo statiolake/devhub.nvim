@@ -483,6 +483,8 @@ local doc = gui.document {
   on_link = function(link) end,           -- { path, line?, col?, href }: true when handled
   scroll = { line = 1 },                  -- the source line at the top to start with
   on_close = function(doc) end,           -- it closed: q, :close, :only
+  on_view = function(doc, view) end,      -- the person scrolled it: { top, bottom }
+  on_source_click = function(doc, pos) end, -- an Alt-click: { line, col? } in the source
 }
 doc:update(text)                          -- the whole text again (base too: doc:update(text, dir))
 doc:scroll_to(42)                         -- source line 42 at the top
@@ -504,7 +506,16 @@ link to a file opens in the window the document was opened from (or your
 Neovim keeps the keys: in its window `j`/`k`, `<C-d>`/`<C-u>`,
 `<C-f>`/`<C-b>`, `gg`/`G` scroll, `<Tab>`/`<S-Tab>` move between links
 and `<CR>` follows one, `<Esc>` goes back to the window you came from, `q`
-closes it; the wheel scrolls it too. Each block is tagged with the source
+closes it. The wheel scrolls it pixel for pixel, and every scroll eases as
+the editor's own smooth scroll does. The mouse is the drawing's: a drag
+selects its text (a double click a word, a triple click a paragraph), ⌘C
+or the right-click menu's Copy copies it, `<Esc>` or a click elsewhere
+lets it go; a click on a link follows it, but not the click that ends a
+drag. An Alt-click is the source's: `on_source_click` hears the source
+line (and column, when the text says it) — without one the document's own
+window takes the cursor there. `on_view` hears each scroll the person makes
+in it (never one that followed `scroll_to`), for a source that follows the
+preview: the two never chase each other. Each block is tagged with the source
 line it starts at, so `scroll_to` puts a source line at the top however
 tall the drawing above it is. Outside DevHub `gui.document` answers `nil`;
 `gui.has_document()` says whether this DevHub draws them.
